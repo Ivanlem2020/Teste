@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#4a90e2">
+    <link rel="manifest" href="manifest.json">
+    <title>Controle de Remédios</title>
+    <style>
+        :root {
+            --primary: #4a90e2;
+            --success: #2ecc71;
+            --danger: #e74c3c;
+            --bg: #f4f7f6;
+            --card-bg: #ffffff;
+            --text: #333333;
+        }
+
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: var(--bg); color: var(--text); margin: 0; padding: 0; }
+        
+        header { width: 100%; background: var(--card-bg); box-shadow: 0 2px 4px rgba(0,0,0,0.1); display: flex; align-items: center; justify-content: space-between; padding: 15px 20px; box-sizing: border-box; }
+        header h1 { margin: 0; font-size: 20px; color: var(--primary); }
+        .menu-btn { background: none; border: none; font-size: 24px; cursor: pointer; color: var(--primary); }
+
+        .container { width: 100%; max-width: 500px; margin: 0 auto; padding: 20px; box-sizing: border-box; }
+
+        /* Banner de permissão de notificação */
+        .notify-banner { background: #fff3cd; border: 1px solid #ffeeba; color: #856404; padding: 12px; border-radius: 8px; margin-bottom: 15px; display: flex; align-items: center; justify-content: space-between; font-size: 13px; }
+        .btn-notify-active { background: #f39c12; color: white; border: none; padding: 6px 12px; border-radius: 6px; font-weight: bold; cursor: pointer; }
+
+        /* Drawer */
+        .drawer-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); opacity: 0; pointer-events: none; transition: 0.3s; z-index: 100; }
+        .drawer-overlay.active { opacity: 1; pointer-events: auto; }
+        .drawer { position: fixed; top: 0; right: -320px; width: 300px; height: 100%; background: white; transition: 0.3s; padding: 20px; box-sizing: border-box; z-index: 101; overflow-y: auto; }
+        .drawer-overlay.active .drawer { right: 0; }
+
+        /* Tabs */
+        .tabs { display: flex; gap: 10px; margin-bottom: 20px; }
+        .tab-btn { flex: 1; padding: 10px; border: none; background: #eee; cursor: pointer; border-radius: 8px; font-weight: bold; }
+        .tab-btn.active { background: var(--primary); color: white; }
+
+        /* Forms e Listas */
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-size: 14px; font-weight: 600; }
+        input, select { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 8px; box-sizing: border-box; background: white; }
+        .btn { width: 100%; color: white; border: none; padding: 12px; border-radius: 8px; font-weight: bold; cursor: pointer; }
+        .btn-add { background-color: var(--primary); }
+
+        /* Opções de Foto da Caixa */
+        .photo-options { display: flex; gap: 8px; margin-bottom: 8px; }
+        .btn-photo { flex: 1; padding: 10px; border: 1px solid var(--primary); background: #eef5fc; color: var(--primary); border-radius: 8px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 5px; font-size: 13px; }
+        .photo-preview { display: none; margin-top: 10px; position: relative; width: 100%; height: 120px; border-radius: 8px; overflow: hidden; border: 1px solid #ddd; }
+        .photo-preview img { width: 100%; height: 100%; object-fit: cover; }
+        .btn-remove-photo { position: absolute; top: 5px; right: 5px; background: rgba(231, 76, 60, 0.85); color: white; border: none; border-radius: 50%; width: 26px; height: 26px; font-weight: bold; cursor: pointer; }
+
+        .med-item { display: flex; align-items: center; background: white; padding: 12px; border-radius: 12px; margin-bottom: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        .med-img { width: 50px; height: 50px; border-radius: 8px; object-fit: cover; margin-right: 12px; cursor: pointer; background: #f0f0f0; }
+        .taken .med-img { cursor: default; }
+        .med-info { flex-grow: 1; }
+        .med-freq { font-size: 12px; color: #777; }
+        .btn-mini { padding: 8px 12px; font-size: 13px; border-radius: 6px; border: none; cursor: pointer; font-weight: bold; background: #e0e0e0; margin-left: 5px; }
+        .taken .btn-mini { background: var(--success); color: white; }
+        
+        .image-modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.9); display: flex; justify-content: center; align-items: center; opacity: 0; pointer-events: none; z-index: 300; transition: 0.3s; }
+        .image-modal.active { opacity: 1; pointer-events: auto; }
+        .image-modal img { max-width: 90%; max-height: 80vh; border-radius: 10px; }
+
+        .confirm-modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); backdrop-filter: blur(3px); display: flex; justify-content: center; align-items: center; opacity: 0; pointer-events: none; z-index: 200; transition: 0.3s; }
+        .confirm-modal-overlay.active { opacity: 1; pointer-events: auto; }
+        .confirm-modal { background: white; padding: 25px; border-radius: 16px; width: 85%; max-width: 350px; text-align: center; box-shadow: 0 10px 25px rgba(0,0,0,0.2); }
+        .modal-btns { display: flex; gap: 10px; }
+        .modal-btns button { flex: 1; padding: 10px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; }
+        .btn-yes { background: var(--success); color: white; }
+        .btn-no { background: #eee; color: #333; }
+    </style>
+</head>
+<body>
+
+<header>
+    <h1>Remédios</h1>
+    <button class="menu-btn" onclick="toggleDrawer(true)">☰</button>
+</header>
+
+<div class="container">
+    <div id="notifyBanner" class="notify-banner" style="display: none;">
+        <span>Ative os lembretes para ser notificado no horário.</span>
+        <button class="btn-notify-active" onclick="requestNotificationPermission()">Ativar</button>
+    </div>
+    <div id="mainList"></div>
+</div>
+
+<div class="drawer-overlay" id="drawerOverlay" onclick="toggleDrawer(false)">
+    <div class="drawer" onclick="event.stopPropagation()">
+        <div class="tabs">
+            <button class="tab-btn active" id="tabAdd" onclick="switchTab('add', true)">Novo</button>
+            <button class="tab-btn" id="tabManage" onclick="switchTab('manage')">Gerenciar</button>
+        </div>
+
+        <div id="contentAdd">
+            <input type="hidden" id="editIndex">
+            <div class="form-group"><label>Nome do Remédio</label><input type="text" id="medName" placeholder="Ex: Amoxicilina"></div>
+            <div class="form-group"><label>Horário Inicial</label><input type="time" id="medTime"></div>
+            <div class="form-group">
+                <label>Frequência</label>
+                <select id="medFreq">
+                    <option value="1x">1x ao dia</option>
+                    <option value="8h">8 em 8 horas</option>
+                    <option value="12h">12 em 12 horas</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label>Foto da Caixa</label>
+                <div class="photo-options">
+                    <button type="button" class="btn-photo" onclick="document.getElementById('cameraInput').click()">
+                        📷 Câmera
+                    </button>
+                    <button type="button" class="btn-photo" onclick="document.getElementById('galleryInput').click()">
+                        🖼️ Galeria
+                    </button>
+                </div>
+
+                <!-- Inputs ocultos para lidar com as capturas -->
+                <input type="file" id="cameraInput" accept="image/*" capture="environment" style="display:none" onchange="handlePhotoSelect(this)">
+                <input type="file" id="galleryInput" accept="image/*" style="display:none" onchange="handlePhotoSelect(this)">
+
+                <!-- Pré-visualização da imagem selecionada -->
+                <div class="photo-preview" id="photoPreview">
+                    <img id="previewImg" src="">
+                    <button type="button" class="btn-remove-photo" onclick="removePhoto()">×</button>
+                </div>
+            </div>
+
+            <button class="btn btn-add" id="btnSave" onclick="saveMedication()">Salvar</button>
+        </div>
+
+        <div id="contentManage" style="display:none">
+            <div id="manageList"></div>
+        </div>
+    </div>
+</div>
+
+<div class="image-modal" id="imageModal" onclick="this.classList.remove('active')">
+    <img id="fullImage" src="">
+</div>
+
+<div class="confirm-modal-overlay" id="confirmModal">
+    <div class="confirm-modal">
+        <h3>Confirmar Dose</h3>
+        <p>Confirmar que tomou o remédio?</p>
+        <div class="modal-btns">
+            <button class="btn-no" onclick="closeConfirmModal()">Não</button>
+            <button class="btn-yes" onclick="confirmTake()">Sim</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    let medications = JSON.parse(localStorage.getItem('medications')) || [];
+    let selectedIndex = null;
+    let currentPhotoBase64 = '';
+
+    // --- REGISTRO DE SERVICE WORKER PARA PWA ---
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('sw.js').catch(err => console.log('Erro ao registrar SW:', err));
+        });
+    }
+
+    // --- CONTROLE DE NOTIFICAÇÕES ---
+    function checkNotificationStatus() {
+        if ("Notification" in window) {
+            if (Notification.permission === "default") {
+                document.getElementById('notifyBanner').style.display = 'flex';
+            } else {
+                document.getElementById('notifyBanner').style.display = 'none';
+            }
+        }
+    }
+
+    function requestNotificationPermission() {
+        if (!("Notification" in window)) {
+            alert("Seu navegador não suporta notificações.");
+            return;
+        }
+        Notification.requestPermission().then(permission => {
+            checkNotificationStatus();
+            if (permission === "granted") {
+                triggerSystemNotification("Remédios", "Notificações ativadas com sucesso!");
+            }
+        });
+    }
+
+    function triggerSystemNotification(title, body) {
+        if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+            navigator.serviceWorker.ready.then(registration => {
+                registration.showNotification(title, {
+                    body: body,
+                    icon: 'https://cdn-icons-png.flaticon.com/512/883/883353.png',
+                    vibrate: [200, 100, 200]
+                });
+            });
+        } else if ("Notification" in window && Notification.permission === "granted") {
+            new Notification(title, { body: body, icon: 'https://cdn-icons-png.flaticon.com/512/883/883353.png' });
+        }
+    }
+
+    function saveToStorage() { localStorage.setItem('medications', JSON.stringify(medications)); render(); }
+    function toggleDrawer(open) { document.getElementById('drawerOverlay').classList.toggle('active', open); }
+
+    function switchTab(tab, shouldReset = false) {
+        document.getElementById('contentAdd').style.display = tab === 'add' ? 'block' : 'none';
+        document.getElementById('contentManage').style.display = tab === 'manage' ? 'block' : 'none';
+        document.getElementById('tabAdd').classList.toggle('active', tab === 'add');
+        document.getElementById('tabManage').classList.toggle('active', tab === 'manage');
+        if(tab === 'add' && shouldReset) resetForm();
+    }
+
+    // --- GERENCIAMENTO DE FOTOS ---
+    function handlePhotoSelect(input) {
+        const file = input.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                currentPhotoBase64 = e.target.result;
+                document.getElementById('previewImg').src = currentPhotoBase64;
+                document.getElementById('photoPreview').style.display = 'block';
+            };
+            reader.readAsDataURL(file);
+        }
+    }
+
+    function removePhoto() {
+        currentPhotoBase64 = '';
+        document.getElementById('previewImg').src = '';
+        document.getElementById('photoPreview').style.display = 'none';
+        document.getElementById('cameraInput').value = '';
+        document.getElementById('galleryInput').value = '';
+    }
+
+    function resetForm() {
+        document.getElementById('editIndex').value = '';
+        document.getElementById('medName').value = '';
+        document.getElementById('medTime').value = '';
+        document.getElementById('medFreq').value = '1x';
+        removePhoto();
+    }
+
+    function saveMedication() {
+        const index = document.getElementById('editIndex').value;
+        const name = document.getElementById('medName').value;
+        const time = document.getElementById('medTime').value;
+        const freq = document.getElementById('medFreq').value;
+
+        if (!name || !time) return alert('Informe nome e horário.');
+
+        if (index === '') {
+            medications.push({
+                name, 
+                time, 
+                freq, 
+                photo: currentPhotoBase64 || '', 
+                taken: false, 
+                nextDoseTimestamp: null, 
+                lastNotified: null
+            });
+        } else { 
+            medications[index].name = name; 
+            medications[index].time = time; 
+            medications[index].freq = freq; 
+            medications[index].photo = currentPhotoBase64; 
+        }
+
+        saveToStorage(); 
+        toggleDrawer(false); 
+        resetForm();
+    }
+
+    function editMed(index) {
+        const m = medications[index];
+        document.getElementById('editIndex').value = index;
+        document.getElementById('medName').value = m.name;
+        document.getElementById('medTime').value = m.time;
+        document.getElementById('medFreq').value = m.freq;
+        
+        if (m.photo) {
+            currentPhotoBase64 = m.photo;
+            document.getElementById('previewImg').src = m.photo;
+            document.getElementById('photoPreview').style.display = 'block';
+        } else {
+            removePhoto();
+        }
+
+        switchTab('add', false);
+    }
+
+    function deleteMed(index) {
+        if(confirm('Excluir?')) { medications.splice(index, 1); saveToStorage(); }
+    }
+
+    function openImageModal(photoUrl, isTaken) {
+        if (isTaken || !photoUrl) return;
+        document.getElementById('fullImage').src = photoUrl;
+        document.getElementById('imageModal').classList.add('active');
+    }
+
+    function openConfirmModal(index) { selectedIndex = index; document.getElementById('confirmModal').classList.add('active'); }
+    function closeConfirmModal() { document.getElementById('confirmModal').classList.remove('active'); selectedIndex = null; }
+
+    function confirmTake() {
+        if (selectedIndex !== null) {
+            const m = medications[selectedIndex];
+            m.taken = true;
+            let nextDate = new Date();
+            const [h, min] = m.time.split(':').map(Number);
+            nextDate.setHours(h, min, 0, 0);
+
+            if (m.freq === '8h') nextDate.setHours(nextDate.getHours() + 8);
+            else if (m.freq === '12h') nextDate.setHours(nextDate.getHours() + 12);
+            else nextDate.setDate(nextDate.getDate() + 1);
+
+            m.time = `${String(nextDate.getHours()).padStart(2, '0')}:${String(nextDate.getMinutes()).padStart(2, '0')}`;
+            m.nextDoseTimestamp = nextDate.getTime();
+            m.lastNotified = null;
+            saveToStorage(); closeConfirmModal();
+        }
+    }
+
+    function checkReminders() {
+        const now = new Date();
+        const currentHHMM = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+        const todayKey = now.toDateString();
+
+        medications.forEach(m => {
+            if (!m.taken && m.time === currentHHMM && m.lastNotified !== todayKey + '_' + currentHHMM) {
+                triggerSystemNotification("Hora do Remédio!", `Está na hora de tomar: ${m.name}`);
+                m.lastNotified = todayKey + '_' + currentHHMM;
+                localStorage.setItem('medications', JSON.stringify(medications));
+            }
+        });
+    }
+
+    function render() {
+        const now = Date.now();
+        medications.forEach(m => {
+            if (m.taken && m.nextDoseTimestamp && now >= m.nextDoseTimestamp) { 
+                m.taken = false; 
+                m.nextDoseTimestamp = null; 
+            }
+        });
+
+        checkReminders();
+
+        document.getElementById('mainList').innerHTML = medications.map((m, i) => `
+            <div class="med-item ${m.taken ? 'taken' : ''}" style="${m.taken ? 'opacity:0.5' : ''}">
+                <img src="${m.photo || 'https://via.placeholder.com/50?text=💊'}" class="med-img" onclick="openImageModal('${m.photo}', ${m.taken})">
+                <div class="med-info"><b>${m.name}</b><br><span>Horário: ${m.time}</span></div>
+                <button class="btn-mini" onclick="${m.taken ? '' : `openConfirmModal(${i})`}" ${m.taken ? 'disabled' : ''}>${m.taken ? '✅ Tomado' : 'Tomar'}</button>
+            </div>
+        `).join('');
+
+        document.getElementById('manageList').innerHTML = medications.map((m, i) => `
+            <div class="med-item">
+                <div class="med-info"><b>${m.name}</b><br><small>${m.time}</small></div>
+                <button class="btn-mini" style="background:#f39c12; color:white;" onclick="editMed(${i})">Editar</button>
+                <button class="btn-mini" style="background:#e74c3c; color:white;" onclick="deleteMed(${i})">Excluir</button>
+            </div>
+        `).join('');
+    }
+
+    checkNotificationStatus();
+    setInterval(render, 5000);
+    render();
+</script>
+
+</body>
+</html>
