@@ -6,79 +6,255 @@
     <meta name="theme-color" content="#4a90e2">
     <link rel="manifest" href="manifest.json">
     <title>Controle de Remédios</title>
+    
+    <!-- Toastify CSS (Alertas Elegantes) -->
+    <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
+    
     <style>
         :root {
             --primary: #4a90e2;
+            --primary-hover: #357abd;
             --success: #2ecc71;
             --danger: #e74c3c;
+            --warning: #f39c12;
             --bg: #f4f7f6;
             --card-bg: #ffffff;
             --text: #333333;
+            --subtext: #666666;
+            --border: #e0e0e0;
         }
 
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: var(--bg); color: var(--text); margin: 0; padding: 0; }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; 
+            background-color: var(--bg); 
+            color: var(--text); 
+            margin: 0; 
+            padding: 0; 
+            -webkit-font-smoothing: antialiased;
+        }
         
-        header { width: 100%; background: var(--card-bg); box-shadow: 0 2px 4px rgba(0,0,0,0.1); display: flex; align-items: center; justify-content: space-between; padding: 15px 20px; box-sizing: border-box; }
-        header h1 { margin: 0; font-size: 20px; color: var(--primary); }
-        .menu-btn { background: none; border: none; font-size: 24px; cursor: pointer; color: var(--primary); }
+        /* --- HEADER & CONTAINER --- */
+        header { 
+            width: 100%; 
+            background: var(--card-bg); 
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06); 
+            display: flex; 
+            align-items: center; 
+            justify-content: space-between; 
+            padding: 16px 20px; 
+            box-sizing: border-box; 
+            position: sticky;
+            top: 0;
+            z-index: 90;
+        }
+        header h1 { 
+            margin: 0; 
+            font-size: 20px; 
+            color: var(--primary); 
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 700;
+        }
+        .menu-btn { 
+            background: #f0f4f9; 
+            border: none; 
+            font-size: 20px; 
+            cursor: pointer; 
+            color: var(--primary); 
+            width: 40px;
+            height: 40px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: 0.2s ease;
+        }
+        .menu-btn:active { background: #e1e8f0; }
 
         .container { width: 100%; max-width: 500px; margin: 0 auto; padding: 20px; box-sizing: border-box; }
 
-        .notify-banner { background: #fff3cd; border: 1px solid #ffeeba; color: #856404; padding: 12px; border-radius: 8px; margin-bottom: 15px; display: flex; align-items: center; justify-content: space-between; font-size: 13px; }
-        .btn-notify-active { background: #f39c12; color: white; border: none; padding: 6px 12px; border-radius: 6px; font-weight: bold; cursor: pointer; }
+        /* --- NOTIFICATION BANNER --- */
+        .notify-banner { 
+            background: linear-gradient(135deg, #fff9e6, #fff3cd); 
+            border: 1px solid #ffeeba; 
+            color: #856404; 
+            padding: 14px 16px; 
+            border-radius: 12px; 
+            margin-bottom: 20px; 
+            display: flex; 
+            align-items: center; 
+            justify-content: space-between; 
+            font-size: 13px; 
+            box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+        }
+        .btn-notify-active { 
+            background: var(--warning); 
+            color: white; 
+            border: none; 
+            padding: 8px 14px; 
+            border-radius: 8px; 
+            font-weight: 600; 
+            cursor: pointer; 
+            transition: 0.2s;
+        }
 
-        .drawer-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); opacity: 0; pointer-events: none; transition: 0.3s; z-index: 100; }
+        /* --- DRAWER (MENU LATERAL) --- */
+        .drawer-overlay { 
+            position: fixed; 
+            top: 0; left: 0; right: 0; bottom: 0; 
+            background: rgba(0,0,0,0.4); 
+            backdrop-filter: blur(4px);
+            opacity: 0; 
+            pointer-events: none; 
+            transition: opacity 0.3s ease; 
+            z-index: 100; 
+        }
         .drawer-overlay.active { opacity: 1; pointer-events: auto; }
-        .drawer { position: fixed; top: 0; right: -320px; width: 300px; height: 100%; background: white; transition: 0.3s; padding: 20px; box-sizing: border-box; z-index: 101; overflow-y: auto; }
+        .drawer { 
+            position: fixed; 
+            top: 0; 
+            right: -320px; 
+            width: 310px; 
+            height: 100%; 
+            background: white; 
+            transition: right 0.3s cubic-bezier(0.16, 1, 0.3, 1); 
+            padding: 24px 20px; 
+            box-sizing: border-box; 
+            z-index: 101; 
+            overflow-y: auto; 
+            box-shadow: -5px 0 25px rgba(0,0,0,0.15);
+        }
         .drawer-overlay.active .drawer { right: 0; }
 
-        .tabs { display: flex; gap: 5px; margin-bottom: 20px; }
-        .tab-btn { flex: 1; padding: 8px; border: none; background: #eee; cursor: pointer; border-radius: 8px; font-weight: bold; font-size: 12px; }
-        .tab-btn.active { background: var(--primary); color: white; }
+        /* --- TABS & FORMULÁRIOS --- */
+        .tabs { display: flex; gap: 6px; margin-bottom: 24px; background: #f0f2f5; padding: 4px; border-radius: 10px; }
+        .tab-btn { 
+            flex: 1; 
+            padding: 10px 4px; 
+            border: none; 
+            background: transparent; 
+            cursor: pointer; 
+            border-radius: 8px; 
+            font-weight: 600; 
+            font-size: 13px; 
+            color: var(--subtext);
+            transition: 0.2s ease;
+        }
+        .tab-btn.active { background: white; color: var(--primary); box-shadow: 0 2px 5px rgba(0,0,0,0.08); }
 
-        .form-group { margin-bottom: 15px; }
-        label { display: block; margin-bottom: 5px; font-size: 14px; font-weight: 600; }
-        input, select { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 8px; box-sizing: border-box; background: white; }
-        .btn { width: 100%; color: white; border: none; padding: 12px; border-radius: 8px; font-weight: bold; cursor: pointer; }
-        .btn-add { background-color: var(--primary); }
-        .btn-sync { background-color: #27ae60; margin-top: 10px; }
+        .form-group { margin-bottom: 18px; }
+        label { display: block; margin-bottom: 6px; font-size: 13px; font-weight: 600; color: #444; }
+        input[type="text"], input[type="time"], select { 
+            width: 100%; 
+            padding: 12px; 
+            border: 1px solid var(--border); 
+            border-radius: 10px; 
+            box-sizing: border-box; 
+            background: #fdfdfd; 
+            font-size: 14px;
+            outline: none;
+            transition: 0.2s;
+        }
+        input:focus, select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.15); }
+
+        .btn { width: 100%; color: white; border: none; padding: 14px; border-radius: 10px; font-weight: 700; cursor: pointer; font-size: 15px; transition: 0.2s; }
+        .btn-add { background-color: var(--primary); box-shadow: 0 4px 12px rgba(74, 144, 226, 0.3); }
+        .btn-add:hover { background-color: var(--primary-hover); }
+        .btn-sync { background-color: #27ae60; box-shadow: 0 4px 12px rgba(39, 174, 96, 0.3); margin-top: 10px; }
 
         .photo-options { display: flex; gap: 8px; margin-bottom: 8px; }
-        .btn-photo { flex: 1; padding: 10px; border: 1px solid var(--primary); background: #eef5fc; color: var(--primary); border-radius: 8px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 5px; font-size: 13px; }
-        .photo-preview { display: none; margin-top: 10px; position: relative; width: 100%; height: 120px; border-radius: 8px; overflow: hidden; border: 1px solid #ddd; }
-        .photo-preview img { width: 100%; height: 100%; object-fit: cover; }
-        .btn-remove-photo { position: absolute; top: 5px; right: 5px; background: rgba(231, 76, 60, 0.85); color: white; border: none; border-radius: 50%; width: 26px; height: 26px; font-weight: bold; cursor: pointer; }
+        .btn-photo { 
+            flex: 1; 
+            padding: 10px; 
+            border: 1px dashed var(--primary); 
+            background: #f0f7ff; 
+            color: var(--primary); 
+            border-radius: 10px; 
+            font-weight: 600; 
+            cursor: pointer; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            gap: 6px; 
+            font-size: 13px; 
+            transition: 0.2s;
+        }
+        .btn-photo:hover { background: #e3f0ff; }
 
-        .med-item { display: flex; align-items: center; background: white; padding: 12px; border-radius: 12px; margin-bottom: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
-        .med-img { width: 50px; height: 50px; border-radius: 8px; object-fit: cover; margin-right: 12px; cursor: pointer; background: #f0f0f0; }
+        .photo-preview { display: none; margin-top: 10px; position: relative; width: 100%; height: 130px; border-radius: 10px; overflow: hidden; border: 1px solid #ddd; }
+        .photo-preview img { width: 100%; height: 100%; object-fit: cover; }
+        .btn-remove-photo { position: absolute; top: 8px; right: 8px; background: rgba(231, 76, 60, 0.9); color: white; border: none; border-radius: 50%; width: 28px; height: 28px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+
+        /* --- LISTA DE REMÉDIOS --- */
+        .empty-state { text-align: center; padding: 40px 20px; color: var(--subtext); font-size: 14px; }
+        .empty-state-icon { font-size: 48px; margin-bottom: 10px; display: block; opacity: 0.7; }
+
+        .med-item { 
+            display: flex; 
+            align-items: center; 
+            background: var(--card-bg); 
+            padding: 14px 16px; 
+            border-radius: 14px; 
+            margin-bottom: 12px; 
+            box-shadow: 0 2px 8px rgba(0,0,0,0.04); 
+            border: 1px solid #f0f0f0;
+            transition: 0.2s ease;
+        }
+        .med-item.taken { opacity: 0.6; background: #fdfdfd; }
+        .med-img { width: 52px; height: 52px; border-radius: 10px; object-fit: cover; margin-right: 14px; cursor: pointer; background: #eef2f5; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
         .taken .med-img { cursor: default; }
         .med-info { flex-grow: 1; }
-        .btn-mini { padding: 8px 12px; font-size: 13px; border-radius: 6px; border: none; cursor: pointer; font-weight: bold; background: #e0e0e0; margin-left: 5px; }
-        .taken .btn-mini { background: var(--success); color: white; }
+        .med-info b { font-size: 15px; color: var(--text); display: block; margin-bottom: 2px; }
+        .med-info span { font-size: 12px; color: var(--subtext); font-weight: 500; }
         
-        .image-modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.9); display: flex; justify-content: center; align-items: center; opacity: 0; pointer-events: none; z-index: 300; transition: 0.3s; }
-        .image-modal.active { opacity: 1; pointer-events: auto; }
-        .image-modal img { max-width: 90%; max-height: 80vh; border-radius: 10px; }
+        .btn-mini { padding: 9px 14px; font-size: 13px; border-radius: 8px; border: none; cursor: pointer; font-weight: 700; background: #e8ecf1; color: var(--text); margin-left: 6px; transition: 0.2s; }
+        .btn-mini:hover { filter: brightness(0.95); }
+        .taken .btn-mini { background: #e8f8f0; color: var(--success); }
 
-        .confirm-modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); backdrop-filter: blur(3px); display: flex; justify-content: center; align-items: center; opacity: 0; pointer-events: none; z-index: 200; transition: 0.3s; }
+        /* --- MODAIS DE CONFIRMAÇÃO E IMAGEM --- */
+        .image-modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.85); backdrop-filter: blur(5px); display: flex; justify-content: center; align-items: center; opacity: 0; pointer-events: none; z-index: 300; transition: 0.3s; }
+        .image-modal.active { opacity: 1; pointer-events: auto; }
+        .image-modal img { max-width: 90%; max-height: 80vh; border-radius: 14px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+
+        .confirm-modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.4); backdrop-filter: blur(4px); display: flex; justify-content: center; align-items: center; opacity: 0; pointer-events: none; z-index: 200; transition: 0.3s; }
         .confirm-modal-overlay.active { opacity: 1; pointer-events: auto; }
-        .confirm-modal { background: white; padding: 25px; border-radius: 16px; width: 85%; max-width: 350px; text-align: center; box-shadow: 0 10px 25px rgba(0,0,0,0.2); }
+        .confirm-modal { background: white; padding: 24px; border-radius: 18px; width: 85%; max-width: 340px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.15); }
+        .confirm-modal h3 { margin: 0 0 8px 0; font-size: 18px; color: var(--text); }
+        .confirm-modal p { color: var(--subtext); font-size: 14px; margin: 0 0 20px 0; }
         .modal-btns { display: flex; gap: 10px; }
-        .modal-btns button { flex: 1; padding: 10px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; }
-        .btn-yes { background: var(--success); color: white; }
-        .btn-no { background: #eee; color: #333; }
+        .modal-btns button { flex: 1; padding: 12px; border: none; border-radius: 10px; font-weight: 700; cursor: pointer; font-size: 14px; }
+        .btn-yes { background: var(--success); color: white; box-shadow: 0 3px 8px rgba(46, 204, 113, 0.3); }
+        .btn-no { background: #f0f2f5; color: var(--text); }
+        .btn-danger-confirm { background: var(--danger); color: white; box-shadow: 0 3px 8px rgba(231, 76, 60, 0.3); }
+
+        /* --- CUSTOMIZAÇÃO DAS NOTIFICAÇÕES TOASTIFY --- */
+        .toastify {
+            border-radius: 10px !important;
+            padding: 12px 18px !important;
+            font-size: 14px !important;
+            font-weight: 600 !important;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.15) !important;
+            display: flex !important;
+            align-items: center !important;
+            gap: 8px !important;
+        }
+        .toast-success { background: linear-gradient(135deg, #27ae60, #2ecc71) !important; }
+        .toast-error { background: linear-gradient(135deg, #c0392b, #e74c3c) !important; }
+        .toast-warning { background: linear-gradient(135deg, #d35400, #f39c12) !important; }
+        .toast-info { background: linear-gradient(135deg, #2980b9, #3498db) !important; }
     </style>
 </head>
 <body>
 
 <header>
-    <h1>Remédios</h1>
-    <button class="menu-btn" id="btnToggleDrawer">☰</button>
+    <h1>💊 Remédios</h1>
+    <button class="menu-btn" id="btnToggleDrawer" aria-label="Abrir menu">☰</button>
 </header>
 
 <div class="container">
     <div id="notifyBanner" class="notify-banner" style="display: none;">
-        <span>Ative os lembretes para ser notificado no horário.</span>
+        <span>Ative os lembretes para ser notificado no horário correto.</span>
         <button class="btn-notify-active" id="btnReqNotify">Ativar</button>
     </div>
     <div id="mainList"></div>
@@ -94,8 +270,14 @@
 
         <div id="contentAdd">
             <input type="hidden" id="editIndex">
-            <div class="form-group"><label>Nome do Remédio</label><input type="text" id="medName" placeholder="Ex: Amoxicilina"></div>
-            <div class="form-group"><label>Horário Inicial</label><input type="time" id="medTime"></div>
+            <div class="form-group">
+                <label>Nome do Remédio</label>
+                <input type="text" id="medName" placeholder="Ex: Amoxicilina">
+            </div>
+            <div class="form-group">
+                <label>Horário Inicial</label>
+                <input type="time" id="medTime">
+            </div>
             <div class="form-group">
                 <label>Frequência</label>
                 <select id="medFreq">
@@ -114,12 +296,12 @@
                 <input type="file" id="cameraInput" accept="image/*" capture="camera" style="display:none">
                 <input type="file" id="galleryInput" accept="image/*" style="display:none">
                 <div class="photo-preview" id="photoPreview">
-                    <img id="previewImg" src="">
-                    <button type="button" class="btn-remove-photo" id="btnRemovePhoto">×</button>
+                    <img id="previewImg" src="" alt="Prévia da foto">
+                    <button type="button" class="btn-remove-photo" id="btnRemovePhoto">✕</button>
                 </div>
             </div>
 
-            <button class="btn btn-add" id="btnSave">Salvar</button>
+            <button class="btn btn-add" id="btnSave">Salvar Remédio</button>
         </div>
 
         <div id="contentManage" style="display:none">
@@ -130,45 +312,80 @@
             <div class="form-group">
                 <label>Chave / ID do Usuário</label>
                 <input type="text" id="userCodeInput" placeholder="Ex: mae">
-                <small style="color: #666; display: block; margin-top: 5px;">Digite a chave para carregar dados de outro dispositivo.</small>
+                <small style="color: var(--subtext); display: block; margin-top: 6px; font-size: 12px; line-height: 1.4;">Digite a chave para sincronizar ou restaurar seus dados de outro aparelho.</small>
             </div>
-            <button class="btn btn-sync" id="btnSyncCloud">Puxar da Nuvem / Sincronizar</button>
+            <button class="btn btn-sync" id="btnSyncCloud">Sincronizar com Nuvem</button>
         </div>
     </div>
 </div>
 
 <div class="image-modal" id="imageModal">
-    <img id="fullImage" src="">
+    <img id="fullImage" src="" alt="Foto expandida">
 </div>
 
+<!-- Modal de Confirmação para Tomar Remédio -->
 <div class="confirm-modal-overlay" id="confirmModal">
     <div class="confirm-modal">
         <h3>Confirmar Dose</h3>
-        <p>Confirmar que tomou o remédio?</p>
+        <p>Confirmar que você tomou este medicamento?</p>
         <div class="modal-btns">
-            <button class="btn-no" id="btnConfirmNo">Não</button>
-            <button class="btn-yes" id="btnConfirmYes">Sim</button>
+            <button class="btn-no" id="btnConfirmNo">Cancelar</button>
+            <button class="btn-yes" id="btnConfirmYes">Confirmar</button>
         </div>
     </div>
 </div>
+
+<!-- Modal de Confirmação para Exclusão -->
+<div class="confirm-modal-overlay" id="deleteModal">
+    <div class="confirm-modal">
+        <h3>Excluir Remédio</h3>
+        <p>Tem certeza que deseja remover este item da lista?</p>
+        <div class="modal-btns">
+            <button class="btn-no" id="btnDeleteNo">Cancelar</button>
+            <button class="btn-danger-confirm" id="btnDeleteYes">Excluir</button>
+        </div>
+    </div>
+</div>
+
+<!-- Toastify JS -->
+<script type="text/javascript" src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
 
 <script>
     // --- CONFIGURAÇÃO DO JSONBIN ---
     const JSONBIN_BIN_ID = "6a8b372cda38895dfe078ab0"; 
     const JSONBIN_API_KEY = "$2a$10$7BBk9AA/0h3zZxTwYz9TluPmvrsT3avKvxNoJNPKX3MJfq0oflohy"; 
-
     const API_URL = `https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}`;
 
     // Estado da Aplicação
     let medications = JSON.parse(localStorage.getItem('medications')) || [];
     let userCode = localStorage.getItem('userCode') || 'mae';
     let selectedIndex = null;
+    let deleteIndex = null;
     let currentPhotoBase64 = '';
 
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
             navigator.serviceWorker.register('sw.js').catch(err => console.log('Erro SW:', err));
         });
+    }
+
+    // --- SISTEMA DE NOTIFICAÇÃO TOAST CUSTOMIZADO ---
+    function notify(text, type = 'info') {
+        const icons = {
+            success: '✅',
+            error: '🚨',
+            warning: '⚠️',
+            info: 'ℹ️'
+        };
+
+        Toastify({
+            text: `${icons[type] || ''} ${text}`,
+            duration: 3000,
+            gravity: "top",
+            position: "center",
+            className: `toast-${type}`,
+            stopOnFocus: true
+        }).showToast();
     }
 
     // --- FUNÇÕES DA INTERFACE ---
@@ -193,10 +410,13 @@
     }
 
     function requestNotificationPermission() {
-        if (!("Notification" in window)) return alert("Seu navegador não suporta notificações.");
+        if (!("Notification" in window)) return notify("Seu navegador não suporta notificações.", "error");
         Notification.requestPermission().then(permission => {
             checkNotificationStatus();
-            if (permission === "granted") triggerSystemNotification("Remédios", "Notificações ativadas!");
+            if (permission === "granted") {
+                notify("Notificações ativadas com sucesso!", "success");
+                triggerSystemNotification("Remédios", "As notificações estão configuradas!");
+            }
         });
     }
 
@@ -266,19 +486,24 @@
 
     function saveMedication() {
         const index = document.getElementById('editIndex').value;
-        const name = document.getElementById('medName').value;
+        const name = document.getElementById('medName').value.trim();
         const time = document.getElementById('medTime').value;
         const freq = document.getElementById('medFreq').value;
 
-        if (!name || !time) return alert('⚠️ Informe nome e horário.');
+        if (!name || !time) {
+            notify("Informe o nome e o horário do remédio.", "warning");
+            return;
+        }
 
         if (index === '') {
             medications.push({ name, time, freq, photo: currentPhotoBase64 || '', taken: false, nextDoseTimestamp: null, lastNotified: null });
+            notify("Remédio cadastrado com sucesso!", "success");
         } else { 
             medications[index].name = name; 
             medications[index].time = time; 
             medications[index].freq = freq; 
             if (currentPhotoBase64) medications[index].photo = currentPhotoBase64; 
+            notify("Remédio atualizado!", "success");
         }
 
         saveToStorage(); 
@@ -303,10 +528,22 @@
         switchTab('add', false);
     }
 
-    function deleteMed(index) {
-        if(confirm('Deseja realmente excluir este remédio?')) { 
-            medications.splice(index, 1); 
-            saveToStorage(); 
+    function openDeleteModal(index) {
+        deleteIndex = index;
+        document.getElementById('deleteModal').classList.add('active');
+    }
+
+    function closeDeleteModal() {
+        document.getElementById('deleteModal').classList.remove('active');
+        deleteIndex = null;
+    }
+
+    function confirmDelete() {
+        if (deleteIndex !== null) {
+            medications.splice(deleteIndex, 1);
+            saveToStorage();
+            notify("Remédio removido.", "info");
+            closeDeleteModal();
         }
     }
 
@@ -336,6 +573,7 @@
             m.lastNotified = null;
             saveToStorage(); 
             closeConfirmModal();
+            notify(`Dose de ${m.name} registrada!`, "success");
         }
     }
 
@@ -344,9 +582,7 @@
         try {
             const response = await fetch(API_URL, {
                 method: 'GET',
-                headers: {
-                    'X-Master-Key': JSONBIN_API_KEY
-                }
+                headers: { 'X-Master-Key': JSONBIN_API_KEY }
             });
 
             if (response.ok) {
@@ -357,16 +593,16 @@
                     medications = allData[targetCode];
                     localStorage.setItem('medications', JSON.stringify(medications));
                     render();
-                    if (!isAuto) alert('✅ Dados sincronizados com sucesso!');
+                    if (!isAuto) notify("Dados sincronizados com a nuvem!", "success");
                 } else if (!isAuto) {
-                    alert('⚠️ Nenhum registro encontrado para esta chave.');
+                    notify("Nenhum registro encontrado para esta chave.", "warning");
                 }
             } else {
                 throw new Error('Falha na requisição');
             }
         } catch (err) {
             console.error(err);
-            if (!isAuto) alert('❌ Erro ao conectar com a nuvem.');
+            if (!isAuto) notify("Erro ao conectar com a nuvem.", "error");
         }
     }
 
@@ -393,15 +629,14 @@
                 },
                 body: JSON.stringify(allData)
             });
-            console.log('✅ Nuvem sincronizada!');
         } catch (e) {
-            console.error('❌ Erro ao enviar para a nuvem:', e);
+            console.error('Erro ao enviar para a nuvem:', e);
         }
     }
 
     async function syncWithCloud() {
         const code = document.getElementById('userCodeInput').value.trim();
-        if (!code) return alert('⚠️ Digite uma chave de usuário válida.');
+        if (!code) return notify("Digite uma chave de usuário válida.", "warning");
         userCode = code;
         localStorage.setItem('userCode', userCode);
         await fetchFromCloud(userCode, false);
@@ -433,22 +668,43 @@
 
         checkReminders();
 
-        document.getElementById('mainList').innerHTML = medications.map((m, i) => `
-            <div class="med-item ${m.taken ? 'taken' : ''}" style="${m.taken ? 'opacity:0.5' : ''}">
-                <img src="${m.photo || 'https://via.placeholder.com/50?text=💊'}" class="med-img" data-index="${i}">
-                <div class="med-info"><b>${m.name}</b><br><span>Horário: ${m.time}</span></div>
-                <button class="btn-mini btn-take" data-index="${i}" ${m.taken ? 'disabled' : ''}>${m.taken ? '✅ Tomado' : 'Tomar'}</button>
-            </div>
-        `).join('');
+        const mainContainer = document.getElementById('mainList');
+        if (medications.length === 0) {
+            mainContainer.innerHTML = `
+                <div class="empty-state">
+                    <span class="empty-state-icon">📋</span>
+                    Nenhum remédio cadastrado.<br>Clique no menu para adicionar.
+                </div>`;
+        } else {
+            mainContainer.innerHTML = medications.map((m, i) => `
+                <div class="med-item ${m.taken ? 'taken' : ''}">
+                    <img src="${m.photo || 'https://via.placeholder.com/52?text=💊'}" class="med-img" data-index="${i}" alt="${m.name}">
+                    <div class="med-info">
+                        <b>${m.name}</b>
+                        <span>Horário: ${m.time} (${m.freq})</span>
+                    </div>
+                    <button class="btn-mini btn-take" data-index="${i}" ${m.taken ? 'disabled' : ''}>${m.taken ? '✅ Tomado' : 'Tomar'}</button>
+                </div>
+            `).join('');
+        }
 
-        document.getElementById('manageList').innerHTML = medications.map((m, i) => `
-            <div class="med-item">
-                <div class="med-info"><b>${m.name}</b><br><small>${m.time}</small></div>
-                <button class="btn-mini btn-edit" data-index="${i}" style="background:#f39c12; color:white;">Editar</button>
-                <button class="btn-mini btn-delete" data-index="${i}" style="background:#e74c3c; color:white;">Excluir</button>
-            </div>
-        `).join('');
+        const manageContainer = document.getElementById('manageList');
+        if (medications.length === 0) {
+            manageContainer.innerHTML = `<div class="empty-state">Sem itens para gerenciar.</div>`;
+        } else {
+            manageContainer.innerHTML = medications.map((m, i) => `
+                <div class="med-item">
+                    <div class="med-info">
+                        <b>${m.name}</b>
+                        <span>${m.time} - ${m.freq}</span>
+                    </div>
+                    <button class="btn-mini btn-edit" data-index="${i}" style="background:#fff3cd; color:#856404;">Editar</button>
+                    <button class="btn-mini btn-delete" data-index="${i}" style="background:#f8d7da; color:#721c24;">Excluir</button>
+                </div>
+            `).join('');
+        }
 
+        // Binds de eventos aos itens dinâmicos
         document.querySelectorAll('.med-img').forEach(img => {
             img.addEventListener('click', (e) => {
                 const idx = e.target.getAttribute('data-index');
@@ -473,7 +729,7 @@
         document.querySelectorAll('.btn-delete').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 const idx = e.target.getAttribute('data-index');
-                deleteMed(idx);
+                openDeleteModal(idx);
             });
         });
     }
@@ -491,7 +747,7 @@
         await fetchFromCloud(userCode, true);
     }
 
-    // Bind de eventos estáticos
+    // Eventos Estáticos
     document.getElementById('btnToggleDrawer').addEventListener('click', () => toggleDrawer(true));
     document.getElementById('drawerOverlay').addEventListener('click', () => toggleDrawer(false));
     document.getElementById('drawerContainer').addEventListener('click', (e) => e.stopPropagation());
@@ -511,8 +767,13 @@
     document.getElementById('btnReqNotify').addEventListener('click', requestNotificationPermission);
 
     document.getElementById('imageModal').addEventListener('click', function() { this.classList.remove('active'); });
+    
+    // Binds dos Modais de Confirmação
     document.getElementById('btnConfirmNo').addEventListener('click', closeConfirmModal);
     document.getElementById('btnConfirmYes').addEventListener('click', confirmTake);
+    
+    document.getElementById('btnDeleteNo').addEventListener('click', closeDeleteModal);
+    document.getElementById('btnDeleteYes').addEventListener('click', confirmDelete);
 
     checkNotificationStatus();
     initUrlParams();
