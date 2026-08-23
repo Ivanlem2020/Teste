@@ -6,8 +6,6 @@
     <meta name="theme-color" content="#4a90e2">
     <link rel="manifest" href="manifest.json">
     <title>Controle de Remédios</title>
-    <!-- Importação do Supabase via CDN -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         :root {
             --primary: #4a90e2;
@@ -75,23 +73,23 @@
 
 <header>
     <h1>Remédios</h1>
-    <button class="menu-btn" onclick="toggleDrawer(true)">☰</button>
+    <button class="menu-btn" id="btnToggleDrawer">☰</button>
 </header>
 
 <div class="container">
     <div id="notifyBanner" class="notify-banner" style="display: none;">
         <span>Ative os lembretes para ser notificado no horário.</span>
-        <button class="btn-notify-active" onclick="requestNotificationPermission()">Ativar</button>
+        <button class="btn-notify-active" id="btnReqNotify">Ativar</button>
     </div>
     <div id="mainList"></div>
 </div>
 
-<div class="drawer-overlay" id="drawerOverlay" onclick="toggleDrawer(false)">
-    <div class="drawer" onclick="event.stopPropagation()">
+<div class="drawer-overlay" id="drawerOverlay">
+    <div class="drawer" id="drawerContainer">
         <div class="tabs">
-            <button class="tab-btn active" id="tabAdd" onclick="switchTab('add', true)">Novo</button>
-            <button class="tab-btn" id="tabManage" onclick="switchTab('manage')">Gerenciar</button>
-            <button class="tab-btn" id="tabSync" onclick="switchTab('sync')">Nuvem</button>
+            <button class="tab-btn active" id="tabAdd">Novo</button>
+            <button class="tab-btn" id="tabManage">Gerenciar</button>
+            <button class="tab-btn" id="tabSync">Nuvem</button>
         </div>
 
         <div id="contentAdd">
@@ -110,18 +108,18 @@
             <div class="form-group">
                 <label>Foto da Caixa</label>
                 <div class="photo-options">
-                    <button type="button" class="btn-photo" onclick="document.getElementById('cameraInput').click()">📷 Câmera</button>
-                    <button type="button" class="btn-photo" onclick="document.getElementById('galleryInput').click()">🖼️ Galeria</button>
+                    <button type="button" class="btn-photo" id="btnCamera">📷 Câmera</button>
+                    <button type="button" class="btn-photo" id="btnGallery">🖼️ Galeria</button>
                 </div>
-                <input type="file" id="cameraInput" accept="image/*" capture="camera" style="display:none" onchange="handlePhotoSelect(this)">
-                <input type="file" id="galleryInput" accept="image/*" style="display:none" onchange="handlePhotoSelect(this)">
+                <input type="file" id="cameraInput" accept="image/*" capture="camera" style="display:none">
+                <input type="file" id="galleryInput" accept="image/*" style="display:none">
                 <div class="photo-preview" id="photoPreview">
                     <img id="previewImg" src="">
-                    <button type="button" class="btn-remove-photo" onclick="removePhoto()">×</button>
+                    <button type="button" class="btn-remove-photo" id="btnRemovePhoto">×</button>
                 </div>
             </div>
 
-            <button class="btn btn-add" id="btnSave" onclick="saveMedication()">Salvar</button>
+            <button class="btn btn-add" id="btnSave">Salvar</button>
         </div>
 
         <div id="contentManage" style="display:none">
@@ -131,15 +129,15 @@
         <div id="contentSync" style="display:none">
             <div class="form-group">
                 <label>Chave / ID do Usuário</label>
-                <input type="text" id="userCodeInput" placeholder="Ex: paciente123">
+                <input type="text" id="userCodeInput" placeholder="Ex: mae">
                 <small style="color: #666; display: block; margin-top: 5px;">Digite a chave para carregar dados de outro dispositivo.</small>
             </div>
-            <button class="btn btn-sync" onclick="syncWithCloud()">Puxar da Nuvem / Sincronizar</button>
+            <button class="btn btn-sync" id="btnSyncCloud">Puxar da Nuvem / Sincronizar</button>
         </div>
     </div>
 </div>
 
-<div class="image-modal" id="imageModal" onclick="this.classList.remove('active')">
+<div class="image-modal" id="imageModal">
     <img id="fullImage" src="">
 </div>
 
@@ -148,20 +146,22 @@
         <h3>Confirmar Dose</h3>
         <p>Confirmar que tomou o remédio?</p>
         <div class="modal-btns">
-            <button class="btn-no" onclick="closeConfirmModal()">Não</button>
-            <button class="btn-yes" onclick="confirmTake()">Sim</button>
+            <button class="btn-no" id="btnConfirmNo">Não</button>
+            <button class="btn-yes" id="btnConfirmYes">Sim</button>
         </div>
     </div>
 </div>
 
 <script>
-    // --- CONFIGURAÇÃO DO SUPABASE ---
-    const SUPABASE_URL = 'https://euraeaopxddhfinfyzjy.supabase.co';
-    const SUPABASE_KEY = 'sb_publishable_2iPk394Y2OTwroA5ICQfyg_l4R8fu7r';
-    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    // --- CONFIGURAÇÃO DO JSONBIN ---
+    const JSONBIN_BIN_ID = "6a8b372cda38895dfe078ab0"; 
+    const JSONBIN_API_KEY = "$2a$10$7BBk9AA/0h3zZxTwYz9TluPmvrsT3avKvxNoJNPKX3MJfq0oflohy"; 
 
+    const API_URL = `https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}`;
+
+    // Estado da Aplicação
     let medications = JSON.parse(localStorage.getItem('medications')) || [];
-    let userCode = localStorage.getItem('userCode') || '';
+    let userCode = localStorage.getItem('userCode') || 'mae';
     let selectedIndex = null;
     let currentPhotoBase64 = '';
 
@@ -171,19 +171,17 @@
         });
     }
 
-    // --- CARREGAMENTO AUTOMÁTICO VIA LINK (PARAMETRO ?user=) ---
-    async function initUrlParams() {
-        const urlParams = new URLSearchParams(window.location.search);
-        const userFromUrl = urlParams.get('user');
+    // --- FUNÇÕES DA INTERFACE ---
+    function toggleDrawer(open) { document.getElementById('drawerOverlay').classList.toggle('active', open); }
 
-        if (userFromUrl) {
-            userCode = userFromUrl.trim();
-            localStorage.setItem('userCode', userCode);
-            document.getElementById('userCodeInput').value = userCode;
-            await fetchFromCloud(userCode, true);
-        } else if (userCode) {
-            document.getElementById('userCodeInput').value = userCode;
-        }
+    function switchTab(tab, shouldReset = false) {
+        document.getElementById('contentAdd').style.display = tab === 'add' ? 'block' : 'none';
+        document.getElementById('contentManage').style.display = tab === 'manage' ? 'block' : 'none';
+        document.getElementById('contentSync').style.display = tab === 'sync' ? 'block' : 'none';
+        document.getElementById('tabAdd').classList.toggle('active', tab === 'add');
+        document.getElementById('tabManage').classList.toggle('active', tab === 'manage');
+        document.getElementById('tabSync').classList.toggle('active', tab === 'sync');
+        if (tab === 'add' && shouldReset) resetForm();
     }
 
     function checkNotificationStatus() {
@@ -212,39 +210,6 @@
         }
     }
 
-    function saveToStorage() { 
-        localStorage.setItem('medications', JSON.stringify(medications)); 
-        render(); 
-        autoUploadToCloud(); 
-    }
-
-    function toggleDrawer(open) { document.getElementById('drawerOverlay').classList.toggle('active', open); }
-
-    function switchTab(tab, shouldReset = false) {
-        document.getElementById('contentAdd').style.display = tab === 'add' ? 'block' : 'none';
-        document.getElementById('contentManage').style.display = tab === 'manage' ? 'block' : 'none';
-        document.getElementById('contentSync').style.display = tab === 'sync' ? 'block' : 'none';
-        document.getElementById('tabAdd').classList.toggle('active', tab === 'add');
-        document.getElementById('tabManage').classList.toggle('active', tab === 'manage');
-        document.getElementById('tabSync').classList.toggle('active', tab === 'sync');
-        if(tab === 'add' && shouldReset) resetForm();
-    }
-
-    function handlePhotoSelect(input) {
-        const file = input.files[0];
-        if (file) {
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                compressImage(e.target.result, 400, 400, 0.7, (compressedBase64) => {
-                    currentPhotoBase64 = compressedBase64;
-                    document.getElementById('previewImg').src = currentPhotoBase64;
-                    document.getElementById('photoPreview').style.display = 'block';
-                });
-            };
-            reader.readAsDataURL(file);
-        }
-    }
-
     function compressImage(dataUrl, maxWidth, maxHeight, quality, callback) {
         const img = new Image();
         img.src = dataUrl;
@@ -262,6 +227,21 @@
         };
     }
 
+    function handlePhotoSelect(input) {
+        const file = input.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                compressImage(e.target.result, 350, 350, 0.6, (compressedBase64) => {
+                    currentPhotoBase64 = compressedBase64;
+                    document.getElementById('previewImg').src = currentPhotoBase64;
+                    document.getElementById('photoPreview').style.display = 'block';
+                });
+            };
+            reader.readAsDataURL(file);
+        }
+    }
+
     function removePhoto() {
         currentPhotoBase64 = '';
         document.getElementById('previewImg').src = '';
@@ -276,6 +256,12 @@
         document.getElementById('medTime').value = '';
         document.getElementById('medFreq').value = '1x';
         removePhoto();
+    }
+
+    function saveToStorage() { 
+        localStorage.setItem('medications', JSON.stringify(medications)); 
+        render(); 
+        autoUploadToCloud(); 
     }
 
     function saveMedication() {
@@ -318,7 +304,10 @@
     }
 
     function deleteMed(index) {
-        if(confirm('Deseja realmente excluir este remédio?')) { medications.splice(index, 1); saveToStorage(); }
+        if(confirm('Deseja realmente excluir este remédio?')) { 
+            medications.splice(index, 1); 
+            saveToStorage(); 
+        }
     }
 
     function openImageModal(photoUrl, isTaken) {
@@ -345,40 +334,68 @@
             m.time = `${String(nextDate.getHours()).padStart(2, '0')}:${String(nextDate.getMinutes()).padStart(2, '0')}`;
             m.nextDoseTimestamp = nextDate.getTime();
             m.lastNotified = null;
-            saveToStorage(); closeConfirmModal();
+            saveToStorage(); 
+            closeConfirmModal();
         }
     }
 
-    // --- FUNÇÃO CORE DE DOWNLOAD DO SUPABASE ---
+    // --- CONEXÃO COM O JSONBIN ---
     async function fetchFromCloud(targetCode, isAuto = false) {
         try {
-            const { data, error } = await supabaseClient
-                .from('medications')
-                .select('*')
-                .eq('user_code', targetCode);
+            const response = await fetch(API_URL, {
+                method: 'GET',
+                headers: {
+                    'X-Master-Key': JSONBIN_API_KEY
+                }
+            });
 
-            if (error) throw error;
-
-            if (data && data.length > 0) {
-                medications = data.map(item => ({
-                    name: item.name,
-                    time: item.time,
-                    freq: item.freq,
-                    photo: item.photo || '',
-                    taken: item.taken,
-                    nextDoseTimestamp: item.next_dose_timestamp,
-                    lastNotified: item.last_notified
-                }));
-                localStorage.setItem('medications', JSON.stringify(medications));
-                render();
-                if (isAuto) console.log('✅ Dados importados automaticamente via URL!');
-                else alert('✅ Sucesso! Dados baixados e sincronizados da nuvem.');
-            } else if (!isAuto) {
-                alert('⚠️ Nenhum remédio encontrado na nuvem para esta chave.');
+            if (response.ok) {
+                const result = await response.json();
+                const allData = result.record || {};
+                
+                if (allData[targetCode]) {
+                    medications = allData[targetCode];
+                    localStorage.setItem('medications', JSON.stringify(medications));
+                    render();
+                    if (!isAuto) alert('✅ Dados sincronizados com sucesso!');
+                } else if (!isAuto) {
+                    alert('⚠️ Nenhum registro encontrado para esta chave.');
+                }
+            } else {
+                throw new Error('Falha na requisição');
             }
         } catch (err) {
             console.error(err);
-            if (!isAuto) alert('❌ Erro ao conectar com o Supabase:\n' + (err.message || 'Erro desconhecido.'));
+            if (!isAuto) alert('❌ Erro ao conectar com a nuvem.');
+        }
+    }
+
+    async function autoUploadToCloud() {
+        if (!userCode) return;
+        try {
+            const getRes = await fetch(API_URL, {
+                headers: { 'X-Master-Key': JSONBIN_API_KEY }
+            });
+            
+            let allData = {};
+            if (getRes.ok) {
+                const getJson = await getRes.json();
+                allData = getJson.record || {};
+            }
+
+            allData[userCode] = medications;
+
+            await fetch(API_URL, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Master-Key': JSONBIN_API_KEY
+                },
+                body: JSON.stringify(allData)
+            });
+            console.log('✅ Nuvem sincronizada!');
+        } catch (e) {
+            console.error('❌ Erro ao enviar para a nuvem:', e);
         }
     }
 
@@ -389,41 +406,6 @@
         localStorage.setItem('userCode', userCode);
         await fetchFromCloud(userCode, false);
         toggleDrawer(false);
-    }
-
-    async function autoUploadToCloud() {
-        if (!userCode) return;
-        try {
-            const { error: deleteError } = await supabaseClient
-                .from('medications')
-                .delete()
-                .eq('user_code', userCode);
-
-            if (deleteError) throw deleteError;
-            
-            const payload = medications.map(m => ({
-                user_code: userCode,
-                name: m.name,
-                time: m.time,
-                freq: m.freq,
-                photo: m.photo,
-                taken: m.taken,
-                next_dose_timestamp: m.nextDoseTimestamp,
-                last_notified: m.lastNotified
-            }));
-
-            if (payload.length > 0) {
-                const { error: insertError } = await supabaseClient
-                    .from('medications')
-                    .insert(payload);
-
-                if (insertError) throw insertError;
-            }
-
-            console.log('✅ Nuvem atualizada com sucesso!');
-        } catch (e) {
-            console.error('❌ Erro ao enviar para a nuvem:', e.message);
-        }
     }
 
     function checkReminders() {
@@ -453,20 +435,84 @@
 
         document.getElementById('mainList').innerHTML = medications.map((m, i) => `
             <div class="med-item ${m.taken ? 'taken' : ''}" style="${m.taken ? 'opacity:0.5' : ''}">
-                <img src="${m.photo || 'https://via.placeholder.com/50?text=💊'}" class="med-img" onclick="openImageModal('${m.photo}', ${m.taken})">
+                <img src="${m.photo || 'https://via.placeholder.com/50?text=💊'}" class="med-img" data-index="${i}">
                 <div class="med-info"><b>${m.name}</b><br><span>Horário: ${m.time}</span></div>
-                <button class="btn-mini" onclick="${m.taken ? '' : `openConfirmModal(${i})`}" ${m.taken ? 'disabled' : ''}>${m.taken ? '✅ Tomado' : 'Tomar'}</button>
+                <button class="btn-mini btn-take" data-index="${i}" ${m.taken ? 'disabled' : ''}>${m.taken ? '✅ Tomado' : 'Tomar'}</button>
             </div>
         `).join('');
 
         document.getElementById('manageList').innerHTML = medications.map((m, i) => `
             <div class="med-item">
                 <div class="med-info"><b>${m.name}</b><br><small>${m.time}</small></div>
-                <button class="btn-mini" style="background:#f39c12; color:white;" onclick="editMed(${i})">Editar</button>
-                <button class="btn-mini" style="background:#e74c3c; color:white;" onclick="deleteMed(${i})">Excluir</button>
+                <button class="btn-mini btn-edit" data-index="${i}" style="background:#f39c12; color:white;">Editar</button>
+                <button class="btn-mini btn-delete" data-index="${i}" style="background:#e74c3c; color:white;">Excluir</button>
             </div>
         `).join('');
+
+        document.querySelectorAll('.med-img').forEach(img => {
+            img.addEventListener('click', (e) => {
+                const idx = e.target.getAttribute('data-index');
+                openImageModal(medications[idx].photo, medications[idx].taken);
+            });
+        });
+
+        document.querySelectorAll('.btn-take').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const idx = e.target.getAttribute('data-index');
+                openConfirmModal(idx);
+            });
+        });
+
+        document.querySelectorAll('.btn-edit').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const idx = e.target.getAttribute('data-index');
+                editMed(idx);
+            });
+        });
+
+        document.querySelectorAll('.btn-delete').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const idx = e.target.getAttribute('data-index');
+                deleteMed(idx);
+            });
+        });
     }
+
+    async function initUrlParams() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const userFromUrl = urlParams.get('user');
+
+        if (userFromUrl) {
+            userCode = userFromUrl.trim();
+        }
+
+        localStorage.setItem('userCode', userCode);
+        document.getElementById('userCodeInput').value = userCode;
+        await fetchFromCloud(userCode, true);
+    }
+
+    // Bind de eventos estáticos
+    document.getElementById('btnToggleDrawer').addEventListener('click', () => toggleDrawer(true));
+    document.getElementById('drawerOverlay').addEventListener('click', () => toggleDrawer(false));
+    document.getElementById('drawerContainer').addEventListener('click', (e) => e.stopPropagation());
+
+    document.getElementById('tabAdd').addEventListener('click', () => switchTab('add', true));
+    document.getElementById('tabManage').addEventListener('click', () => switchTab('manage'));
+    document.getElementById('tabSync').addEventListener('click', () => switchTab('sync'));
+
+    document.getElementById('btnCamera').addEventListener('click', () => document.getElementById('cameraInput').click());
+    document.getElementById('btnGallery').addEventListener('click', () => document.getElementById('galleryInput').click());
+    document.getElementById('cameraInput').addEventListener('change', function() { handlePhotoSelect(this); });
+    document.getElementById('galleryInput').addEventListener('change', function() { handlePhotoSelect(this); });
+    document.getElementById('btnRemovePhoto').addEventListener('click', removePhoto);
+
+    document.getElementById('btnSave').addEventListener('click', saveMedication);
+    document.getElementById('btnSyncCloud').addEventListener('click', syncWithCloud);
+    document.getElementById('btnReqNotify').addEventListener('click', requestNotificationPermission);
+
+    document.getElementById('imageModal').addEventListener('click', function() { this.classList.remove('active'); });
+    document.getElementById('btnConfirmNo').addEventListener('click', closeConfirmModal);
+    document.getElementById('btnConfirmYes').addEventListener('click', confirmTake);
 
     checkNotificationStatus();
     initUrlParams();
