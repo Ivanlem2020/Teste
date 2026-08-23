@@ -6,6 +6,8 @@
     <meta name="theme-color" content="#4a90e2">
     <link rel="manifest" href="manifest.json">
     <title>Controle de Remédios</title>
+    <!-- Importação do Supabase via CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         :root {
             --primary: #4a90e2;
@@ -24,29 +26,25 @@
 
         .container { width: 100%; max-width: 500px; margin: 0 auto; padding: 20px; box-sizing: border-box; }
 
-        /* Banner de permissão de notificação */
         .notify-banner { background: #fff3cd; border: 1px solid #ffeeba; color: #856404; padding: 12px; border-radius: 8px; margin-bottom: 15px; display: flex; align-items: center; justify-content: space-between; font-size: 13px; }
         .btn-notify-active { background: #f39c12; color: white; border: none; padding: 6px 12px; border-radius: 6px; font-weight: bold; cursor: pointer; }
 
-        /* Drawer */
         .drawer-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); opacity: 0; pointer-events: none; transition: 0.3s; z-index: 100; }
         .drawer-overlay.active { opacity: 1; pointer-events: auto; }
         .drawer { position: fixed; top: 0; right: -320px; width: 300px; height: 100%; background: white; transition: 0.3s; padding: 20px; box-sizing: border-box; z-index: 101; overflow-y: auto; }
         .drawer-overlay.active .drawer { right: 0; }
 
-        /* Tabs */
-        .tabs { display: flex; gap: 10px; margin-bottom: 20px; }
-        .tab-btn { flex: 1; padding: 10px; border: none; background: #eee; cursor: pointer; border-radius: 8px; font-weight: bold; }
+        .tabs { display: flex; gap: 5px; margin-bottom: 20px; }
+        .tab-btn { flex: 1; padding: 8px; border: none; background: #eee; cursor: pointer; border-radius: 8px; font-weight: bold; font-size: 12px; }
         .tab-btn.active { background: var(--primary); color: white; }
 
-        /* Forms e Listas */
         .form-group { margin-bottom: 15px; }
         label { display: block; margin-bottom: 5px; font-size: 14px; font-weight: 600; }
         input, select { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 8px; box-sizing: border-box; background: white; }
         .btn { width: 100%; color: white; border: none; padding: 12px; border-radius: 8px; font-weight: bold; cursor: pointer; }
         .btn-add { background-color: var(--primary); }
+        .btn-sync { background-color: #27ae60; margin-top: 10px; }
 
-        /* Opções de Foto da Caixa */
         .photo-options { display: flex; gap: 8px; margin-bottom: 8px; }
         .btn-photo { flex: 1; padding: 10px; border: 1px solid var(--primary); background: #eef5fc; color: var(--primary); border-radius: 8px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 5px; font-size: 13px; }
         .photo-preview { display: none; margin-top: 10px; position: relative; width: 100%; height: 120px; border-radius: 8px; overflow: hidden; border: 1px solid #ddd; }
@@ -57,7 +55,6 @@
         .med-img { width: 50px; height: 50px; border-radius: 8px; object-fit: cover; margin-right: 12px; cursor: pointer; background: #f0f0f0; }
         .taken .med-img { cursor: default; }
         .med-info { flex-grow: 1; }
-        .med-freq { font-size: 12px; color: #777; }
         .btn-mini { padding: 8px 12px; font-size: 13px; border-radius: 6px; border: none; cursor: pointer; font-weight: bold; background: #e0e0e0; margin-left: 5px; }
         .taken .btn-mini { background: var(--success); color: white; }
         
@@ -94,6 +91,7 @@
         <div class="tabs">
             <button class="tab-btn active" id="tabAdd" onclick="switchTab('add', true)">Novo</button>
             <button class="tab-btn" id="tabManage" onclick="switchTab('manage')">Gerenciar</button>
+            <button class="tab-btn" id="tabSync" onclick="switchTab('sync')">Nuvem</button>
         </div>
 
         <div id="contentAdd">
@@ -112,19 +110,11 @@
             <div class="form-group">
                 <label>Foto da Caixa</label>
                 <div class="photo-options">
-                    <button type="button" class="btn-photo" onclick="document.getElementById('cameraInput').click()">
-                        📷 Câmera
-                    </button>
-                    <button type="button" class="btn-photo" onclick="document.getElementById('galleryInput').click()">
-                        🖼️ Galeria
-                    </button>
+                    <button type="button" class="btn-photo" onclick="document.getElementById('cameraInput').click()">📷 Câmera</button>
+                    <button type="button" class="btn-photo" onclick="document.getElementById('galleryInput').click()">🖼️ Galeria</button>
                 </div>
-
-                <!-- Inputs ocultos para lidar com as capturas -->
-                <input type="file" id="cameraInput" accept="image/*" capture="environment" style="display:none" onchange="handlePhotoSelect(this)">
+                <input type="file" id="cameraInput" accept="image/*" capture="camera" style="display:none" onchange="handlePhotoSelect(this)">
                 <input type="file" id="galleryInput" accept="image/*" style="display:none" onchange="handlePhotoSelect(this)">
-
-                <!-- Pré-visualização da imagem selecionada -->
                 <div class="photo-preview" id="photoPreview">
                     <img id="previewImg" src="">
                     <button type="button" class="btn-remove-photo" onclick="removePhoto()">×</button>
@@ -136,6 +126,15 @@
 
         <div id="contentManage" style="display:none">
             <div id="manageList"></div>
+        </div>
+
+        <div id="contentSync" style="display:none">
+            <div class="form-group">
+                <label>Chave / ID do Usuário (Sua Identificação)</label>
+                <input type="text" id="userCodeInput" placeholder="Ex: meu-email@gmail.com">
+                <small style="color: #666; display: block; margin-top: 5px;">Use a mesma chave em outro celular para puxar os remédios de lá.</small>
+            </div>
+            <button class="btn btn-sync" onclick="syncWithCloud()">Puxar da Nuvem / Sincronizar</button>
         </div>
     </div>
 </div>
@@ -156,78 +155,99 @@
 </div>
 
 <script>
+    // --- CONFIGURAÇÃO DO SUPABASE ---
+    const SUPABASE_URL = 'https://euraeaopxddhfinfyzjy.supabase.co';
+    const SUPABASE_KEY = 'wlNzE8sb2ptf2Uze';
+    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
     let medications = JSON.parse(localStorage.getItem('medications')) || [];
+    let userCode = localStorage.getItem('userCode') || '';
     let selectedIndex = null;
     let currentPhotoBase64 = '';
 
-    // --- REGISTRO DE SERVICE WORKER PARA PWA ---
+    document.getElementById('userCodeInput').value = userCode;
+
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-            navigator.serviceWorker.register('sw.js').catch(err => console.log('Erro ao registrar SW:', err));
+            navigator.serviceWorker.register('sw.js').catch(err => console.log('Erro SW:', err));
         });
     }
 
-    // --- CONTROLE DE NOTIFICAÇÕES ---
     function checkNotificationStatus() {
-        if ("Notification" in window) {
-            if (Notification.permission === "default") {
-                document.getElementById('notifyBanner').style.display = 'flex';
-            } else {
-                document.getElementById('notifyBanner').style.display = 'none';
-            }
+        if ("Notification" in window && Notification.permission === "default") {
+            document.getElementById('notifyBanner').style.display = 'flex';
+        } else {
+            document.getElementById('notifyBanner').style.display = 'none';
         }
     }
 
     function requestNotificationPermission() {
-        if (!("Notification" in window)) {
-            alert("Seu navegador não suporta notificações.");
-            return;
-        }
+        if (!("Notification" in window)) return alert("Seu navegador não suporta notificações.");
         Notification.requestPermission().then(permission => {
             checkNotificationStatus();
-            if (permission === "granted") {
-                triggerSystemNotification("Remédios", "Notificações ativadas com sucesso!");
-            }
+            if (permission === "granted") triggerSystemNotification("Remédios", "Notificações ativadas!");
         });
     }
 
     function triggerSystemNotification(title, body) {
         if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-            navigator.serviceWorker.ready.then(registration => {
-                registration.showNotification(title, {
-                    body: body,
-                    icon: 'https://cdn-icons-png.flaticon.com/512/883/883353.png',
-                    vibrate: [200, 100, 200]
-                });
+            navigator.serviceWorker.ready.then(reg => {
+                reg.showNotification(title, { body, icon: 'https://cdn-icons-png.flaticon.com/512/883/883353.png', vibrate: [200, 100, 200] });
             });
         } else if ("Notification" in window && Notification.permission === "granted") {
-            new Notification(title, { body: body, icon: 'https://cdn-icons-png.flaticon.com/512/883/883353.png' });
+            new Notification(title, { body, icon: 'https://cdn-icons-png.flaticon.com/512/883/883353.png' });
         }
     }
 
-    function saveToStorage() { localStorage.setItem('medications', JSON.stringify(medications)); render(); }
+    function saveToStorage() { 
+        localStorage.setItem('medications', JSON.stringify(medications)); 
+        render(); 
+        autoUploadToCloud(); // Tenta enviar em background se houver internet
+    }
+
     function toggleDrawer(open) { document.getElementById('drawerOverlay').classList.toggle('active', open); }
 
     function switchTab(tab, shouldReset = false) {
         document.getElementById('contentAdd').style.display = tab === 'add' ? 'block' : 'none';
         document.getElementById('contentManage').style.display = tab === 'manage' ? 'block' : 'none';
+        document.getElementById('contentSync').style.display = tab === 'sync' ? 'block' : 'none';
         document.getElementById('tabAdd').classList.toggle('active', tab === 'add');
         document.getElementById('tabManage').classList.toggle('active', tab === 'manage');
+        document.getElementById('tabSync').classList.toggle('active', tab === 'sync');
         if(tab === 'add' && shouldReset) resetForm();
     }
 
-    // --- GERENCIAMENTO DE FOTOS ---
     function handlePhotoSelect(input) {
         const file = input.files[0];
         if (file) {
             const reader = new FileReader();
             reader.onload = function(e) {
-                currentPhotoBase64 = e.target.result;
-                document.getElementById('previewImg').src = currentPhotoBase64;
-                document.getElementById('photoPreview').style.display = 'block';
+                // Comprime levemente a imagem para caber bem no banco de dados e localStorage
+                compressImage(e.target.result, 400, 400, 0.7, (compressedBase64) => {
+                    currentPhotoBase64 = compressedBase64;
+                    document.getElementById('previewImg').src = currentPhotoBase64;
+                    document.getElementById('photoPreview').style.display = 'block';
+                });
             };
             reader.readAsDataURL(file);
         }
+    }
+
+    function compressImage(dataUrl, maxWidth, maxHeight, quality, callback) {
+        const img = new Image();
+        img.src = dataUrl;
+        img.onload = () => {
+            let width = img.width;
+            let height = img.height;
+            if (width > height) { if (width > maxWidth) { height *= maxWidth / width; width = maxWidth; } }
+            else { if (height > maxHeight) { width *= maxHeight / height; height = maxHeight; } }
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
+            callback(canvas.toDataURL('image/jpeg', quality));
+        };
     }
 
     function removePhoto() {
@@ -255,20 +275,12 @@
         if (!name || !time) return alert('Informe nome e horário.');
 
         if (index === '') {
-            medications.push({
-                name, 
-                time, 
-                freq, 
-                photo: currentPhotoBase64 || '', 
-                taken: false, 
-                nextDoseTimestamp: null, 
-                lastNotified: null
-            });
+            medications.push({ name, time, freq, photo: currentPhotoBase64 || '', taken: false, nextDoseTimestamp: null, lastNotified: null });
         } else { 
             medications[index].name = name; 
             medications[index].time = time; 
             medications[index].freq = freq; 
-            medications[index].photo = currentPhotoBase64; 
+            if (currentPhotoBase64) medications[index].photo = currentPhotoBase64; 
         }
 
         saveToStorage(); 
@@ -290,7 +302,6 @@
         } else {
             removePhoto();
         }
-
         switchTab('add', false);
     }
 
@@ -323,6 +334,71 @@
             m.nextDoseTimestamp = nextDate.getTime();
             m.lastNotified = null;
             saveToStorage(); closeConfirmModal();
+        }
+    }
+
+    // --- SINCRONIZAÇÃO COM SUPABASE ---
+    async function syncWithCloud() {
+        const code = document.getElementById('userCodeInput').value.trim();
+        if (!code) return alert('Digite uma chave de usuário válida.');
+        
+        userCode = code;
+        localStorage.setItem('userCode', userCode);
+
+        try {
+            // Busca dados do Supabase
+            const { data, error } = await supabaseClient
+                .from('medications')
+                .select('*')
+                .eq('user_code', userCode);
+
+            if (error) throw error;
+
+            if (data && data.length > 0) {
+                medications = data.map(item => ({
+                    name: item.name,
+                    time: item.time,
+                    freq: item.freq,
+                    photo: item.photo || '',
+                    taken: item.taken,
+                    nextDoseTimestamp: item.next_dose_timestamp,
+                    lastNotified: item.last_notified
+                }));
+                localStorage.setItem('medications', JSON.stringify(medications));
+                render();
+                alert('Dados sincronizados e baixados com sucesso!');
+                toggleDrawer(false);
+            } else {
+                alert('Nenhum remédio encontrado na nuvem para esta chave. Os dados locais atuais serão mantidos.');
+            }
+        } catch (err) {
+            console.error(err);
+            alert('Erro ao conectar com a nuvem. Verifique sua internet ou credenciais do Supabase.');
+        }
+    }
+
+    async function autoUploadToCloud() {
+        if (!userCode) return;
+        try {
+            // Limpa registros anteriores da nuvem para essa chave e insere os atualizados
+            await supabaseClient.from('medications').delete().eq('user_code', userCode);
+            
+            const payload = medications.map(m => ({
+                user_code: userCode,
+                name: m.name,
+                time: m.time,
+                freq: m.freq,
+                photo: m.photo,
+                taken: m.taken,
+                next_dose_timestamp: m.nextDoseTimestamp,
+                last_notified: m.lastNotified
+            }));
+
+            if (payload.length > 0) {
+                await supabaseClient.from('medications').insert(payload);
+            }
+        } catch (e) {
+            console.log('Modo offline: alteração salva apenas localmente por enquanto.');
         }
     }
 
