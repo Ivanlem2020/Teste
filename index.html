@@ -157,7 +157,7 @@
 <script>
     // --- CONFIGURAÇÃO DO SUPABASE ---
     const SUPABASE_URL = 'https://euraeaopxddhfinfyzjy.supabase.co/rest/v1/';
-    const SUPABASE_KEY = 'sb_secret_JSLiZkitQr8hZSYarqZykw_628zuvLR';
+    const SUPABASE_KEY = 'sb_publishable_2iPk394Y2OTwroA5ICQfyg_l4R8fu7r';
     const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
     let medications = JSON.parse(localStorage.getItem('medications')) || [];
@@ -202,7 +202,7 @@
     function saveToStorage() { 
         localStorage.setItem('medications', JSON.stringify(medications)); 
         render(); 
-        autoUploadToCloud(); // Tenta enviar em background se houver internet
+        autoUploadToCloud(); // Sincroniza em background
     }
 
     function toggleDrawer(open) { document.getElementById('drawerOverlay').classList.toggle('active', open); }
@@ -222,7 +222,6 @@
         if (file) {
             const reader = new FileReader();
             reader.onload = function(e) {
-                // Comprime levemente a imagem para caber bem no banco de dados e localStorage
                 compressImage(e.target.result, 400, 400, 0.7, (compressedBase64) => {
                     currentPhotoBase64 = compressedBase64;
                     document.getElementById('previewImg').src = currentPhotoBase64;
@@ -272,7 +271,7 @@
         const time = document.getElementById('medTime').value;
         const freq = document.getElementById('medFreq').value;
 
-        if (!name || !time) return alert('Informe nome e horário.');
+        if (!name || !time) return alert('⚠️ Informe nome e horário.');
 
         if (index === '') {
             medications.push({ name, time, freq, photo: currentPhotoBase64 || '', taken: false, nextDoseTimestamp: null, lastNotified: null });
@@ -306,7 +305,7 @@
     }
 
     function deleteMed(index) {
-        if(confirm('Excluir?')) { medications.splice(index, 1); saveToStorage(); }
+        if(confirm('Deseja realmente excluir este remédio?')) { medications.splice(index, 1); saveToStorage(); }
     }
 
     function openImageModal(photoUrl, isTaken) {
@@ -337,16 +336,15 @@
         }
     }
 
-    // --- SINCRONIZAÇÃO COM SUPABASE ---
+    // --- SINCRONIZAÇÃO COM SUPABASE (COM MENSAGENS DE SUCESSO/ERRO) ---
     async function syncWithCloud() {
         const code = document.getElementById('userCodeInput').value.trim();
-        if (!code) return alert('Digite uma chave de usuário válida.');
+        if (!code) return alert('⚠️ Digite uma chave de usuário válida.');
         
         userCode = code;
         localStorage.setItem('userCode', userCode);
 
         try {
-            // Busca dados do Supabase
             const { data, error } = await supabaseClient
                 .from('medications')
                 .select('*')
@@ -366,22 +364,26 @@
                 }));
                 localStorage.setItem('medications', JSON.stringify(medications));
                 render();
-                alert('Dados sincronizados e baixados com sucesso!');
+                alert('✅ Sucesso! Dados baixados e sincronizados da nuvem.');
                 toggleDrawer(false);
             } else {
-                alert('Nenhum remédio encontrado na nuvem para esta chave. Os dados locais atuais serão mantidos.');
+                alert('⚠️ Nenhum remédio encontrado na nuvem para esta chave.');
             }
         } catch (err) {
             console.error(err);
-            alert('Erro ao conectar com a nuvem. Verifique sua internet ou credenciais do Supabase.');
+            alert('❌ Erro ao conectar com o Supabase:\n' + (err.message || 'Verifique sua conexão ou credenciais.'));
         }
     }
 
     async function autoUploadToCloud() {
         if (!userCode) return;
         try {
-            // Limpa registros anteriores da nuvem para essa chave e insere os atualizados
-            await supabaseClient.from('medications').delete().eq('user_code', userCode);
+            const { error: deleteError } = await supabaseClient
+                .from('medications')
+                .delete()
+                .eq('user_code', userCode);
+
+            if (deleteError) throw deleteError;
             
             const payload = medications.map(m => ({
                 user_code: userCode,
@@ -395,10 +397,16 @@
             }));
 
             if (payload.length > 0) {
-                await supabaseClient.from('medications').insert(payload);
+                const { error: insertError } = await supabaseClient
+                    .from('medications')
+                    .insert(payload);
+
+                if (insertError) throw insertError;
             }
+
+            console.log('✅ Nuvem atualizada com sucesso!');
         } catch (e) {
-            console.log('Modo offline: alteração salva apenas localmente por enquanto.');
+            console.error('❌ Erro ao enviar para a nuvem:', e.message);
         }
     }
 
