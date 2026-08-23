@@ -130,9 +130,9 @@
 
         <div id="contentSync" style="display:none">
             <div class="form-group">
-                <label>Chave / ID do Usuário (Sua Identificação)</label>
-                <input type="text" id="userCodeInput" placeholder="Ex: meu-email@gmail.com">
-                <small style="color: #666; display: block; margin-top: 5px;">Use a mesma chave em outro celular para puxar os remédios de lá.</small>
+                <label>Chave / ID do Usuário</label>
+                <input type="text" id="userCodeInput" placeholder="Ex: paciente123">
+                <small style="color: #666; display: block; margin-top: 5px;">Digite a chave para carregar dados de outro dispositivo.</small>
             </div>
             <button class="btn btn-sync" onclick="syncWithCloud()">Puxar da Nuvem / Sincronizar</button>
         </div>
@@ -165,12 +165,25 @@
     let selectedIndex = null;
     let currentPhotoBase64 = '';
 
-    document.getElementById('userCodeInput').value = userCode;
-
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
             navigator.serviceWorker.register('sw.js').catch(err => console.log('Erro SW:', err));
         });
+    }
+
+    // --- CARREGAMENTO AUTOMÁTICO VIA LINK (PARAMETRO ?user=) ---
+    async function initUrlParams() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const userFromUrl = urlParams.get('user');
+
+        if (userFromUrl) {
+            userCode = userFromUrl.trim();
+            localStorage.setItem('userCode', userCode);
+            document.getElementById('userCodeInput').value = userCode;
+            await fetchFromCloud(userCode, true);
+        } else if (userCode) {
+            document.getElementById('userCodeInput').value = userCode;
+        }
     }
 
     function checkNotificationStatus() {
@@ -202,7 +215,7 @@
     function saveToStorage() { 
         localStorage.setItem('medications', JSON.stringify(medications)); 
         render(); 
-        autoUploadToCloud(); // Sincroniza em background
+        autoUploadToCloud(); 
     }
 
     function toggleDrawer(open) { document.getElementById('drawerOverlay').classList.toggle('active', open); }
@@ -336,19 +349,13 @@
         }
     }
 
-    // --- SINCRONIZAÇÃO COM SUPABASE (COM MENSAGENS DE SUCESSO/ERRO) ---
-    async function syncWithCloud() {
-        const code = document.getElementById('userCodeInput').value.trim();
-        if (!code) return alert('⚠️ Digite uma chave de usuário válida.');
-        
-        userCode = code;
-        localStorage.setItem('userCode', userCode);
-
+    // --- FUNÇÃO CORE DE DOWNLOAD DO SUPABASE ---
+    async function fetchFromCloud(targetCode, isAuto = false) {
         try {
             const { data, error } = await supabaseClient
                 .from('medications')
                 .select('*')
-                .eq('user_code', userCode);
+                .eq('user_code', targetCode);
 
             if (error) throw error;
 
@@ -364,15 +371,24 @@
                 }));
                 localStorage.setItem('medications', JSON.stringify(medications));
                 render();
-                alert('✅ Sucesso! Dados baixados e sincronizados da nuvem.');
-                toggleDrawer(false);
-            } else {
+                if (isAuto) console.log('✅ Dados importados automaticamente via URL!');
+                else alert('✅ Sucesso! Dados baixados e sincronizados da nuvem.');
+            } else if (!isAuto) {
                 alert('⚠️ Nenhum remédio encontrado na nuvem para esta chave.');
             }
         } catch (err) {
             console.error(err);
-            alert('❌ Erro ao conectar com o Supabase:\n' + (err.message || 'Verifique sua conexão ou credenciais.'));
+            if (!isAuto) alert('❌ Erro ao conectar com o Supabase:\n' + (err.message || 'Erro desconhecido.'));
         }
+    }
+
+    async function syncWithCloud() {
+        const code = document.getElementById('userCodeInput').value.trim();
+        if (!code) return alert('⚠️ Digite uma chave de usuário válida.');
+        userCode = code;
+        localStorage.setItem('userCode', userCode);
+        await fetchFromCloud(userCode, false);
+        toggleDrawer(false);
     }
 
     async function autoUploadToCloud() {
@@ -453,6 +469,7 @@
     }
 
     checkNotificationStatus();
+    initUrlParams();
     setInterval(render, 5000);
     render();
 </script>
