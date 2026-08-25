@@ -272,7 +272,7 @@
 
 <div class="container">
     <div id="notifyBanner" class="notify-banner" style="display: none;">
-        <span>Ative os lembretes para ser notificado no horário correto.</span>
+        <span>Ative os lembretes para ser notificado com o app fechado.</span>
         <button class="btn-notify-active" id="btnReqNotify">Ativar</button>
     </div>
     <div id="mainList"></div>
@@ -366,18 +366,14 @@
 <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
 
 <script>
+    let swRegistration = null;
+
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
             navigator.serviceWorker.register('sw.js').then(reg => {
+                swRegistration = reg;
                 reg.update();
-                reg.onupdatefound = () => {
-                    const installingWorker = reg.installing;
-                    installingWorker.onstatechange = () => {
-                        if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                            window.location.reload();
-                        }
-                    };
-                };
+                syncAllAlarmsWithSW();
             }).catch(err => console.log('Erro SW:', err));
         });
     }
@@ -435,25 +431,51 @@
         Notification.requestPermission().then(permission => {
             checkNotificationStatus();
             if (permission === "granted") {
-                notify("Notificações ativadas com sucesso!", "success");
-                triggerSystemNotification("Remédios", "As notificações estão configuradas!");
+                notify("Notificações em segundo plano ativadas!", "success");
+                syncAllAlarmsWithSW();
             }
         });
     }
 
-    function triggerSystemNotification(title, body, photo = null, delayMs = 0) {
-        if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+    function syncAllAlarmsWithSW() {
+        if (!('serviceWorker' in navigator) || Notification.permission !== 'granted') return;
+
+        medications.forEach((m, idx) => {
+            if (!m.taken && m.time) {
+                scheduleSWAlarm(m, idx);
+            }
+        });
+    }
+
+    function scheduleSWAlarm(medication, index) {
+        if (!navigator.serviceWorker.controller) return;
+
+        const now = new Date();
+        const [h, min] = medication.time.split(':').map(Number);
+        let target = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, min, 0, 0);
+
+        if (target.getTime() <= now.getTime()) {
+            target.setDate(target.getDate() + 1);
+        }
+
+        const delayMs = target.getTime() - now.getTime();
+
+        navigator.serviceWorker.controller.postMessage({
+            type: 'SCHEDULE_ALARM',
+            id: index,
+            title: `⏰ HORA DO REMÉDIO: ${medication.name}`,
+            body: `Está na hora exata de tomar o seu ${medication.name}.`,
+            photo: medication.photo || null,
+            delayMs: delayMs
+        });
+    }
+
+    function cancelSWAlarm(index) {
+        if (navigator.serviceWorker.controller) {
             navigator.serviceWorker.controller.postMessage({
-                type: 'TRIGGER_ALARM',
-                title: title,
-                body: body,
-                photo: photo,
-                delay: delayMs
+                type: 'CANCEL_ALARM',
+                id: index
             });
-        } else if ("Notification" in window && Notification.permission === "granted") {
-            setTimeout(() => {
-                new Notification(title, { body });
-            }, delayMs);
         }
     }
 
@@ -479,13 +501,11 @@
         return schedules;
     }
 
-    // COMPRESSÃO ULTRA-LEVE PARA EVITAR ERRO DE MEMÓRIA NO ANDROID
     function handlePhotoSelect(input) {
         const file = input.files[0];
         if (file) {
             const reader = new FileReader();
             reader.onload = function(e) {
-                // Reduz para 120px max e qualidade 0.2 (gera ~5KB a 8KB por foto)
                 compressImage(e.target.result, 120, 120, 0.2, (compressedBase64) => {
                     currentPhotoBase64 = compressedBase64;
                     document.getElementById('previewImg').src = currentPhotoBase64;
@@ -535,6 +555,7 @@
     function saveToStorage() { 
         localStorage.setItem('medications', JSON.stringify(medications)); 
         render(); 
+        syncAllAlarmsWithSW();
         autoUploadToCloud(); 
     }
 
@@ -595,6 +616,7 @@
 
     function confirmDelete() {
         if (deleteIndex !== null) {
+            cancelSWAlarm(deleteIndex);
             medications.splice(deleteIndex, 1);
             saveToStorage();
             notify("Remédio removido.", "info");
@@ -615,6 +637,8 @@
         if (selectedIndex !== null) {
             const m = medications[selectedIndex];
             m.taken = true;
+            cancelSWAlarm(selectedIndex);
+
             let nextDate = new Date();
             const [h, min] = m.time.split(':').map(Number);
             nextDate.setHours(h, min, 0, 0);
@@ -626,6 +650,7 @@
             m.time = `${String(nextDate.getHours()).padStart(2, '0')}:${String(nextDate.getMinutes()).padStart(2, '0')}`;
             m.nextDoseTimestamp = nextDate.getTime();
             m.lastNotified = null;
+            
             saveToStorage(); 
             closeConfirmModal();
             notify(`Dose de ${m.name} registrada!`, "success");
@@ -647,6 +672,7 @@
                     medications = allData[targetCode];
                     localStorage.setItem('medications', JSON.stringify(medications));
                     render();
+                    syncAllAlarmsWithSW();
                     if (!isAuto) notify("Dados sincronizados com a nuvem!", "success");
                 } else if (!isAuto) {
                     notify("Nenhum registro encontrado para esta chave.", "warning");
@@ -691,7 +717,6 @@
         toggleDrawer(false);
     }
 
-    // FUNÇÃO DE VERIFICAÇÃO LEVE SEM RE-RENDERIZAR O DOM
     function checkReminders() {
         const now = new Date();
         const currentHHMM = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
@@ -707,13 +732,6 @@
 
             if (!m.taken && m.time === currentHHMM && m.lastNotified !== todayKey + '_' + currentHHMM) {
                 notify(`HORA DO REMÉDIO: ${m.name}`, "alarm");
-                
-                triggerSystemNotification(
-                    `⏰ HORA DO REMÉDIO: ${m.name}`,
-                    `Atenção! Está na hora exata de tomar o ${m.name}.`,
-                    m.photo || null
-                );
-                
                 m.lastNotified = todayKey + '_' + currentHHMM;
                 localStorage.setItem('medications', JSON.stringify(medications));
             }
@@ -721,6 +739,7 @@
 
         if (stateChanged) {
             render();
+            syncAllAlarmsWithSW();
         }
     }
 
@@ -856,7 +875,6 @@
     checkNotificationStatus();
     initUrlParams();
     
-    // Roda apenas a checagem leve a cada 10 segundos para economizar memória e bateria
     setInterval(checkReminders, 10000); 
     render();
 </script>

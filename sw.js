@@ -1,63 +1,91 @@
-const CACHE_NAME = 'remedios-app-v2';
+const CACHE_NAME = 'remedios-app-v1.4';
+const ASSETS = [
+    './',
+    './index.html',
+    './manifest.json'
+];
 
+// Instalação e Cache
 self.addEventListener('install', (event) => {
     self.skipWaiting();
+    event.waitUntil(
+        caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS))
+    );
 });
 
+// Ativação e limpeza de caches antigos
 self.addEventListener('activate', (event) => {
-    event.waitUntil(clients.claim());
+    event.waitUntil(
+        caches.keys().then((keys) => {
+            return Promise.all(
+                keys.map((key) => {
+                    if (key !== CACHE_NAME) return caches.delete(key);
+                })
+            );
+        }).then(() => self.clients.claim())
+    );
 });
 
-// ESCUTA AS MENSAGENS ENVIADAS PELO INDEX.HTML
+// Interceptação de requisições
+self.addEventListener('fetch', (event) => {
+    event.respondWith(
+        caches.match(event.request).then((cachedResponse) => {
+            return cachedResponse || fetch(event.request);
+        })
+    );
+});
+
+// Gerenciamento de Notificações em Segundo Plano
+const scheduledAlarms = new Map();
+
 self.addEventListener('message', (event) => {
-    if (event.data && (event.data.type === 'SCHEDULE_NOTIFICATION' || event.data.type === 'TRIGGER_ALARM')) {
+    if (!event.data) return;
+
+    if (event.data.type === 'SCHEDULE_ALARM') {
+        const { id, title, body, photo, delayMs } = event.data;
         
-        const title = event.data.title || '🚨 HORA DO REMÉDIO!';
-        const body = event.data.body || 'Está na hora de tomar seu medicamento.';
-        const medPhoto = event.data.photo || null; // Se enviar a foto do remédio
+        // Cancela alarme anterior se existir
+        if (scheduledAlarms.has(id)) {
+            clearTimeout(scheduledAlarms.get(id));
+        }
 
-        const options = {
-            body: body,
-            icon: 'https://cdn-icons-png.flaticon.com/512/883/883407.png', // Ícone da notificação
-            badge: 'https://cdn-icons-png.flaticon.com/512/883/883407.png', // Ícone miniatura na barra
-            image: medPhoto || 'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=600&auto=format&fit=crop', // Banner expandido
-            vibrate: [500, 100, 500, 100, 500, 100, 1000, 200, 1000], // Padrão de alarme forte
-            tag: 'urgente-remedio',
-            renotify: true,
-            requireInteraction: true, // Mantém presa na tela até o usuário clicar
-            silent: false,
-            actions: [
-                { action: 'confirm', title: '✅ Já Tomei' },
-                { action: 'open', title: '👁️ Abrir App' }
-            ]
-        };
+        // Agenda o disparo nativo
+        const timerId = setTimeout(() => {
+            self.registration.showNotification(title, {
+                body: body,
+                icon: photo || 'https://via.placeholder.com/192/4a90e2/ffffff?text=💊',
+                badge: 'https://via.placeholder.com/96/4a90e2/ffffff?text=💊',
+                vibrate: [500, 200, 500, 200, 500],
+                tag: 'med-alarm-' + id,
+                renotify: true,
+                requireInteraction: true,
+                data: { url: './' }
+            });
+            scheduledAlarms.delete(id);
+        }, delayMs);
 
-        const delay = event.data.delay || 0;
-
-        if (delay > 0) {
-            setTimeout(() => {
-                self.registration.showNotification(title, options);
-            }, delay);
-        } else {
-            self.registration.showNotification(title, options);
+        scheduledAlarms.set(id, timerId);
+    } else if (event.data.type === 'CANCEL_ALARM') {
+        const { id } = event.data;
+        if (scheduledAlarms.has(id)) {
+            clearTimeout(scheduledAlarms.get(id));
+            scheduledAlarms.delete(id);
         }
     }
 });
 
-// TRATAMENTO DOS CLIQUES NAS AÇÕES DA NOTIFICAÇÃO
+// Evento ao clicar na notificação enviada
 self.addEventListener('notificationclick', (event) => {
     event.notification.close();
-
-    // Se clicar em "Já Tomei" ou na notificação em si, abre o app
     event.waitUntil(
         clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
-            for (const client of clientList) {
-                if ('focus' in client) {
+            for (let client of clientList) {
+                if (client.url && 'focus' in client) {
                     return client.focus();
                 }
             }
             if (clients.openWindow) {
-                return clients.openWindow('/');
+                return clients.openWindow('./');
             }
         })
     );
