@@ -7,7 +7,6 @@
     <link rel="manifest" href="manifest.json">
     <title>Controle de Remédios</title>
     
-    <!-- Toastify CSS -->
     <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
     
     <style>
@@ -33,7 +32,6 @@
             -webkit-font-smoothing: antialiased;
         }
         
-        /* HEADER & CONTAINER */
         header { 
             width: 100%; 
             background: var(--card-bg); 
@@ -74,7 +72,6 @@
 
         .container { width: 100%; max-width: 500px; margin: 0 auto; padding: 20px; box-sizing: border-box; }
 
-        /* NOTIFICATION BANNER */
         .notify-banner { 
             background: linear-gradient(135deg, #fff9e6, #fff3cd); 
             border: 1px solid #ffeeba; 
@@ -99,7 +96,6 @@
             transition: 0.2s;
         }
 
-        /* DRAWER (MENU LATERAL) */
         .drawer-overlay { 
             position: fixed; 
             top: 0; left: 0; right: 0; bottom: 0; 
@@ -127,7 +123,6 @@
         }
         .drawer-overlay.active .drawer { right: 0; }
 
-        /* TABS & FORMULÁRIOS */
         .tabs { display: flex; gap: 6px; margin-bottom: 24px; background: #f0f2f5; padding: 4px; border-radius: 10px; }
         .tab-btn { 
             flex: 1; 
@@ -186,7 +181,6 @@
         .photo-preview img { width: 100%; height: 100%; object-fit: cover; }
         .btn-remove-photo { position: absolute; top: 8px; right: 8px; background: rgba(231, 76, 60, 0.9); color: white; border: none; border-radius: 50%; width: 28px; height: 28px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; }
 
-        /* LISTA DE REMÉDIOS */
         .empty-state { text-align: center; padding: 40px 20px; color: var(--subtext); font-size: 14px; }
         .empty-state-icon { font-size: 48px; margin-bottom: 10px; display: block; opacity: 0.7; }
 
@@ -208,7 +202,6 @@
         .med-info b { font-size: 15px; color: var(--text); display: block; margin-bottom: 4px; }
         .med-info span { font-size: 12px; color: var(--subtext); font-weight: 500; }
         
-        /* ETIQUETAS DE HORÁRIOS EXPOSTOS */
         .schedule-badges { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 5px; }
         .schedule-badge { 
             background: #f0f4f9; 
@@ -230,7 +223,6 @@
         .btn-mini:hover { filter: brightness(0.95); }
         .taken .btn-mini { background: #e8f8f0; color: var(--success); }
 
-        /* MODAIS DE CONFIRMAÇÃO E IMAGEM */
         .image-modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.85); backdrop-filter: blur(5px); display: flex; justify-content: center; align-items: center; opacity: 0; pointer-events: none; z-index: 300; transition: 0.3s; }
         .image-modal.active { opacity: 1; pointer-events: auto; }
         .image-modal img { max-width: 90%; max-height: 80vh; border-radius: 14px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
@@ -246,7 +238,6 @@
         .btn-no { background: #f0f2f5; color: var(--text); }
         .btn-danger-confirm { background: var(--danger); color: white; box-shadow: 0 3px 8px rgba(231, 76, 60, 0.3); }
 
-        /* CUSTOMIZAÇÃO TOASTIFY */
         .toastify {
             border-radius: 10px !important;
             padding: 12px 18px !important;
@@ -262,7 +253,6 @@
         .toast-warning { background: linear-gradient(135deg, #d35400, #f39c12) !important; }
         .toast-info { background: linear-gradient(135deg, #2980b9, #3498db) !important; }
         
-        /* TOAST DE ALARME DE DESTAQUE EM VERDE */
         .toast-alarm { 
             background: linear-gradient(135deg, #10b981, #059669) !important; 
             border: 2px solid #34d399 !important;
@@ -489,12 +479,14 @@
         return schedules;
     }
 
+    // COMPRESSÃO ULTRA-LEVE PARA EVITAR ERRO DE MEMÓRIA NO ANDROID
     function handlePhotoSelect(input) {
         const file = input.files[0];
         if (file) {
             const reader = new FileReader();
             reader.onload = function(e) {
-                compressImage(e.target.result, 350, 350, 0.6, (compressedBase64) => {
+                // Reduz para 120px max e qualidade 0.2 (gera ~5KB a 8KB por foto)
+                compressImage(e.target.result, 120, 120, 0.2, (compressedBase64) => {
                     currentPhotoBase64 = compressedBase64;
                     document.getElementById('previewImg').src = currentPhotoBase64;
                     document.getElementById('photoPreview').style.display = 'block';
@@ -579,9 +571,12 @@
         document.getElementById('medFreq').value = m.freq;
         
         if (m.photo) {
-            currentPhotoBase64 = m.photo;
-            document.getElementById('previewImg').src = m.photo;
-            document.getElementById('photoPreview').style.display = 'block';
+            compressImage(m.photo, 120, 120, 0.2, (compressed) => {
+                currentPhotoBase64 = compressed;
+                m.photo = compressed;
+                document.getElementById('previewImg').src = currentPhotoBase64;
+                document.getElementById('photoPreview').style.display = 'block';
+            });
         } else {
             removePhoto();
         }
@@ -696,17 +691,23 @@
         toggleDrawer(false);
     }
 
+    // FUNÇÃO DE VERIFICAÇÃO LEVE SEM RE-RENDERIZAR O DOM
     function checkReminders() {
         const now = new Date();
         const currentHHMM = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
         const todayKey = now.toDateString();
+        let stateChanged = false;
 
         medications.forEach(m => {
+            if (m.taken && m.nextDoseTimestamp && now.getTime() >= m.nextDoseTimestamp) { 
+                m.taken = false; 
+                m.nextDoseTimestamp = null; 
+                stateChanged = true;
+            }
+
             if (!m.taken && m.time === currentHHMM && m.lastNotified !== todayKey + '_' + currentHHMM) {
-                // Alerta verde na tela do app
                 notify(`HORA DO REMÉDIO: ${m.name}`, "alarm");
                 
-                // Envia para o Service Worker acionar o banner destacado no Android
                 triggerSystemNotification(
                     `⏰ HORA DO REMÉDIO: ${m.name}`,
                     `Atenção! Está na hora exata de tomar o ${m.name}.`,
@@ -717,19 +718,13 @@
                 localStorage.setItem('medications', JSON.stringify(medications));
             }
         });
+
+        if (stateChanged) {
+            render();
+        }
     }
 
     function render() {
-        const now = Date.now();
-        medications.forEach(m => {
-            if (m.taken && m.nextDoseTimestamp && now >= m.nextDoseTimestamp) { 
-                m.taken = false; 
-                m.nextDoseTimestamp = null; 
-            }
-        });
-
-        checkReminders();
-
         const mainContainer = document.getElementById('mainList');
         if (medications.length === 0) {
             mainContainer.innerHTML = `<div class="empty-state"><span class="empty-state-icon">📋</span>Nenhum remédio cadastrado.<br>Clique no menu para adicionar.</div>`;
@@ -860,7 +855,9 @@
 
     checkNotificationStatus();
     initUrlParams();
-    setInterval(render, 5000);
+    
+    // Roda apenas a checagem leve a cada 10 segundos para economizar memória e bateria
+    setInterval(checkReminders, 10000); 
     render();
 </script>
 
