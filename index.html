@@ -205,10 +205,28 @@
         .med-img { width: 52px; height: 52px; border-radius: 10px; object-fit: cover; margin-right: 14px; cursor: pointer; background: #eef2f5; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
         .taken .med-img { cursor: default; }
         .med-info { flex-grow: 1; }
-        .med-info b { font-size: 15px; color: var(--text); display: block; margin-bottom: 2px; }
+        .med-info b { font-size: 15px; color: var(--text); display: block; margin-bottom: 4px; }
         .med-info span { font-size: 12px; color: var(--subtext); font-weight: 500; }
         
-        .btn-mini { padding: 9px 14px; font-size: 13px; border-radius: 8px; border: none; cursor: pointer; font-weight: 700; background: #e8ecf1; color: var(--text); margin-left: 6px; transition: 0.2s; }
+        /* ETIQUETAS DE HORÁRIOS EXPOSTOS */
+        .schedule-badges { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 5px; }
+        .schedule-badge { 
+            background: #f0f4f9; 
+            color: #555; 
+            padding: 3px 8px; 
+            border-radius: 6px; 
+            font-size: 11px; 
+            font-weight: 600; 
+            border: 1px solid #e1e8f0;
+        }
+        .schedule-badge.next-dose { 
+            background: #e3f0ff; 
+            color: var(--primary); 
+            border-color: #bcdcff; 
+            font-weight: 700;
+        }
+
+        .btn-mini { padding: 9px 14px; font-size: 13px; border-radius: 8px; border: none; cursor: pointer; font-weight: 700; background: #e8ecf1; color: var(--text); margin-left: 6px; transition: 0.2s; flex-shrink: 0; }
         .btn-mini:hover { filter: brightness(0.95); }
         .taken .btn-mini { background: #e8f8f0; color: var(--success); }
 
@@ -243,6 +261,16 @@
         .toast-error { background: linear-gradient(135deg, #c0392b, #e74c3c) !important; }
         .toast-warning { background: linear-gradient(135deg, #d35400, #f39c12) !important; }
         .toast-info { background: linear-gradient(135deg, #2980b9, #3498db) !important; }
+        
+        /* TOAST DE ALARME DE DESTAQUE EM VERDE */
+        .toast-alarm { 
+            background: linear-gradient(135deg, #10b981, #059669) !important; 
+            border: 2px solid #34d399 !important;
+            color: #ffffff !important;
+            font-size: 15px !important;
+            padding: 16px 20px !important;
+            box-shadow: 0 10px 25px rgba(16, 185, 129, 0.4) !important;
+        }
     </style>
 </head>
 <body>
@@ -348,16 +376,15 @@
 <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
 
 <script>
-    // AUTOMAÇÃO DE ATUALIZAÇÃO DE SERVICE WORKER / CACHE
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
             navigator.serviceWorker.register('sw.js').then(reg => {
-                reg.update(); // Força o SW a checar por novas versões
+                reg.update();
                 reg.onupdatefound = () => {
                     const installingWorker = reg.installing;
                     installingWorker.onstatechange = () => {
                         if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                            window.location.reload(); // Recarrega para aplicar as mudanças
+                            window.location.reload();
                         }
                     };
                 };
@@ -365,7 +392,6 @@
         });
     }
 
-    // CONFIGURAÇÃO DO JSONBIN
     const JSONBIN_BIN_ID = "6a8b372cda38895dfe078ab0"; 
     const JSONBIN_API_KEY = "$2a$10$7BBk9AA/0h3zZxTwYz9TluPmvrsT3avKvxNoJNPKX3MJfq0oflohy"; 
     const API_URL = `https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}`;
@@ -377,15 +403,21 @@
     let currentPhotoBase64 = '';
 
     function notify(text, type = 'info') {
-        const icons = { success: '✅', error: '🚨', warning: '⚠️', info: 'ℹ️' };
+        const icons = { success: '✅', error: '🚨', warning: '⚠️', info: 'ℹ️', alarm: '⏰' };
         Toastify({
             text: `${icons[type] || ''} ${text}`,
-            duration: 3000,
+            duration: 5000,
             gravity: "top",
             position: "center",
             className: `toast-${type}`,
             stopOnFocus: true
         }).showToast();
+    }
+
+    function formatFrequencyDisplay(freq) {
+        if (freq === '8h') return '8/8h';
+        if (freq === '12h') return '12/12h';
+        return freq;
     }
 
     function toggleDrawer(open) { document.getElementById('drawerOverlay').classList.toggle('active', open); }
@@ -419,31 +451,42 @@
         });
     }
 
-    function triggerSystemNotification(title, body) {
+    function triggerSystemNotification(title, body, photo = null, delayMs = 0) {
         if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-            navigator.serviceWorker.ready.then(reg => {
-                reg.showNotification(title, { body, icon: 'https://cdn-icons-png.flaticon.com/512/883/883353.png', vibrate: [200, 100, 200] });
+            navigator.serviceWorker.controller.postMessage({
+                type: 'TRIGGER_ALARM',
+                title: title,
+                body: body,
+                photo: photo,
+                delay: delayMs
             });
         } else if ("Notification" in window && Notification.permission === "granted") {
-            new Notification(title, { body, icon: 'https://cdn-icons-png.flaticon.com/512/883/883353.png' });
+            setTimeout(() => {
+                new Notification(title, { body });
+            }, delayMs);
         }
     }
 
-    function compressImage(dataUrl, maxWidth, maxHeight, quality, callback) {
-        const img = new Image();
-        img.src = dataUrl;
-        img.onload = () => {
-            let width = img.width;
-            let height = img.height;
-            if (width > height) { if (width > maxWidth) { height *= maxWidth / width; width = maxWidth; } }
-            else { if (height > maxHeight) { width *= maxHeight / height; height = maxHeight; } }
-            const canvas = document.createElement('canvas');
-            canvas.width = width;
-            canvas.height = height;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(img, 0, 0, width, height);
-            callback(canvas.toDataURL('image/jpeg', quality));
-        };
+    function calculateAllSchedules(startTime, freq) {
+        if (!startTime) return [];
+        const [h, m] = startTime.split(':').map(Number);
+        let intervalHours = 24;
+
+        if (freq === '8h') intervalHours = 8;
+        else if (freq === '12h') intervalHours = 12;
+        else return [startTime];
+
+        const totalDoses = 24 / intervalHours;
+        const schedules = [];
+
+        for (let i = 0; i < totalDoses; i++) {
+            let totalMins = (h * 60 + m) + (i * intervalHours * 60);
+            let doseH = Math.floor((totalMins / 60) % 24);
+            let doseM = totalMins % 60;
+            schedules.push(`${String(doseH).padStart(2, '0')}:${String(doseM).padStart(2, '0')}`);
+        }
+
+        return schedules;
     }
 
     function handlePhotoSelect(input) {
@@ -459,6 +502,26 @@
             };
             reader.readAsDataURL(file);
         }
+    }
+
+    function compressImage(base64, maxWidth, maxHeight, quality, callback) {
+        const img = new Image();
+        img.src = base64;
+        img.onload = () => {
+            let width = img.width;
+            let height = img.height;
+            if (width > height) {
+                if (width > maxWidth) { height *= maxWidth / width; width = maxWidth; }
+            } else {
+                if (height > maxHeight) { width *= maxHeight / height; height = maxHeight; }
+            }
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
+            callback(canvas.toDataURL('image/jpeg', quality));
+        };
     }
 
     function removePhoto() {
@@ -492,11 +555,12 @@
         if (!name || !time) return notify("Informe o nome e o horário do remédio.", "warning");
 
         if (index === '') {
-            medications.push({ name, time, freq, photo: currentPhotoBase64 || '', taken: false, nextDoseTimestamp: null, lastNotified: null });
+            medications.push({ name, time, freq, initialTime: time, photo: currentPhotoBase64 || '', taken: false, nextDoseTimestamp: null, lastNotified: null });
             notify("Remédio cadastrado com sucesso!", "success");
         } else { 
             medications[index].name = name; 
             medications[index].time = time; 
+            medications[index].initialTime = time;
             medications[index].freq = freq; 
             if (currentPhotoBase64) medications[index].photo = currentPhotoBase64; 
             notify("Remédio atualizado!", "success");
@@ -511,7 +575,7 @@
         const m = medications[index];
         document.getElementById('editIndex').value = index;
         document.getElementById('medName').value = m.name;
-        document.getElementById('medTime').value = m.time;
+        document.getElementById('medTime').value = m.initialTime || m.time;
         document.getElementById('medFreq').value = m.freq;
         
         if (m.photo) {
@@ -639,7 +703,16 @@
 
         medications.forEach(m => {
             if (!m.taken && m.time === currentHHMM && m.lastNotified !== todayKey + '_' + currentHHMM) {
-                triggerSystemNotification("Hora do Remédio!", `Está na hora de tomar: ${m.name}`);
+                // Alerta verde na tela do app
+                notify(`HORA DO REMÉDIO: ${m.name}`, "alarm");
+                
+                // Envia para o Service Worker acionar o banner destacado no Android
+                triggerSystemNotification(
+                    `⏰ HORA DO REMÉDIO: ${m.name}`,
+                    `Atenção! Está na hora exata de tomar o ${m.name}.`,
+                    m.photo || null
+                );
+                
                 m.lastNotified = todayKey + '_' + currentHHMM;
                 localStorage.setItem('medications', JSON.stringify(medications));
             }
@@ -661,32 +734,60 @@
         if (medications.length === 0) {
             mainContainer.innerHTML = `<div class="empty-state"><span class="empty-state-icon">📋</span>Nenhum remédio cadastrado.<br>Clique no menu para adicionar.</div>`;
         } else {
-            mainContainer.innerHTML = medications.map((m, i) => `
-                <div class="med-item ${m.taken ? 'taken' : ''}">
-                    <img src="${m.photo || 'https://via.placeholder.com/52?text=💊'}" class="med-img" data-index="${i}" alt="${m.name}">
-                    <div class="med-info">
-                        <b>${m.name}</b>
-                        <span>Horário: ${m.time} (${m.freq})</span>
+            mainContainer.innerHTML = medications.map((m, i) => {
+                const baseTime = m.initialTime || m.time;
+                const allSchedules = calculateAllSchedules(baseTime, m.freq);
+                const freqText = formatFrequencyDisplay(m.freq);
+                
+                let scheduleHTML = '';
+                if (allSchedules.length > 1) {
+                    const badges = allSchedules.map(timeStr => {
+                        const isNext = (timeStr === m.time && !m.taken);
+                        return `<span class="schedule-badge ${isNext ? 'next-dose' : ''}">${timeStr}</span>`;
+                    }).join('');
+
+                    scheduleHTML = `
+                        <span>Frequência: ${freqText}</span>
+                        <div class="schedule-badges">${badges}</div>
+                    `;
+                } else {
+                    scheduleHTML = `<span>Horário: ${m.time} (${freqText})</span>`;
+                }
+
+                return `
+                    <div class="med-item ${m.taken ? 'taken' : ''}">
+                        <img src="${m.photo || 'https://via.placeholder.com/52?text=💊'}" class="med-img" data-index="${i}" alt="${m.name}">
+                        <div class="med-info">
+                            <b>${m.name}</b>
+                            ${scheduleHTML}
+                        </div>
+                        <button class="btn-mini btn-take" data-index="${i}" ${m.taken ? 'disabled' : ''}>${m.taken ? '✅ Tomado' : 'Tomar'}</button>
                     </div>
-                    <button class="btn-mini btn-take" data-index="${i}" ${m.taken ? 'disabled' : ''}>${m.taken ? '✅ Tomado' : 'Tomar'}</button>
-                </div>
-            `).join('');
+                `;
+            }).join('');
         }
 
         const manageContainer = document.getElementById('manageList');
         if (medications.length === 0) {
             manageContainer.innerHTML = `<div class="empty-state">Sem itens para gerenciar.</div>`;
         } else {
-            manageContainer.innerHTML = medications.map((m, i) => `
-                <div class="med-item">
-                    <div class="med-info">
-                        <b>${m.name}</b>
-                        <span>${m.time} - ${m.freq}</span>
+            manageContainer.innerHTML = medications.map((m, i) => {
+                const baseTime = m.initialTime || m.time;
+                const allSchedules = calculateAllSchedules(baseTime, m.freq);
+                const schedulesStr = allSchedules.join(' - ');
+                const freqText = formatFrequencyDisplay(m.freq);
+
+                return `
+                    <div class="med-item">
+                        <div class="med-info">
+                            <b>${m.name}</b>
+                            <span>${schedulesStr} (${freqText})</span>
+                        </div>
+                        <button class="btn-mini btn-edit" data-index="${i}" style="background:#fff3cd; color:#856404;">Editar</button>
+                        <button class="btn-mini btn-delete" data-index="${i}" style="background:#f8d7da; color:#721c24;">Excluir</button>
                     </div>
-                    <button class="btn-mini btn-edit" data-index="${i}" style="background:#fff3cd; color:#856404;">Editar</button>
-                    <button class="btn-mini btn-delete" data-index="${i}" style="background:#f8d7da; color:#721c24;">Excluir</button>
-                </div>
-            `).join('');
+                `;
+            }).join('');
         }
 
         document.querySelectorAll('.med-img').forEach(img => {
