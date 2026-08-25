@@ -272,7 +272,7 @@
 
 <div class="container">
     <div id="notifyBanner" class="notify-banner" style="display: none;">
-        <span>Ative os lembretes para ser notificado com o app fechado.</span>
+        <span>Ative os lembretes para ser notificado no horário correto.</span>
         <button class="btn-notify-active" id="btnReqNotify">Ativar</button>
     </div>
     <div id="mainList"></div>
@@ -366,12 +366,9 @@
 <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
 
 <script>
-    let swRegistration = null;
-
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
             navigator.serviceWorker.register('sw.js').then(reg => {
-                swRegistration = reg;
                 reg.update();
                 syncAllAlarmsWithSW();
             }).catch(err => console.log('Erro SW:', err));
@@ -431,24 +428,14 @@
         Notification.requestPermission().then(permission => {
             checkNotificationStatus();
             if (permission === "granted") {
-                notify("Notificações em segundo plano ativadas!", "success");
+                notify("Notificações ativadas com sucesso!", "success");
                 syncAllAlarmsWithSW();
             }
         });
     }
 
-    function syncAllAlarmsWithSW() {
-        if (!('serviceWorker' in navigator) || Notification.permission !== 'granted') return;
-
-        medications.forEach((m, idx) => {
-            if (!m.taken && m.time) {
-                scheduleSWAlarm(m, idx);
-            }
-        });
-    }
-
     function scheduleSWAlarm(medication, index) {
-        if (!navigator.serviceWorker.controller) return;
+        if (!('serviceWorker' in navigator) || Notification.permission !== 'granted') return;
 
         const now = new Date();
         const [h, min] = medication.time.split(':').map(Number);
@@ -460,23 +447,51 @@
 
         const delayMs = target.getTime() - now.getTime();
 
-        navigator.serviceWorker.controller.postMessage({
-            type: 'SCHEDULE_ALARM',
-            id: index,
-            title: `⏰ HORA DO REMÉDIO: ${medication.name}`,
-            body: `Está na hora exata de tomar o seu ${medication.name}.`,
-            photo: medication.photo || null,
-            delayMs: delayMs
-        });
+        const sendToSW = (worker) => {
+            if (worker) {
+                worker.postMessage({
+                    type: 'SCHEDULE_ALARM',
+                    id: index,
+                    title: `⏰ HORA DO REMÉDIO: ${medication.name}`,
+                    body: `Está na hora exata de tomar o seu ${medication.name}.`,
+                    photo: medication.photo || null,
+                    delayMs: delayMs
+                });
+            }
+        };
+
+        if (navigator.serviceWorker.controller) {
+            sendToSW(navigator.serviceWorker.controller);
+        } else {
+            navigator.serviceWorker.ready.then(reg => sendToSW(reg.active));
+        }
     }
 
     function cancelSWAlarm(index) {
+        const sendCancel = (worker) => {
+            if (worker) {
+                worker.postMessage({
+                    type: 'CANCEL_ALARM',
+                    id: index
+                });
+            }
+        };
+
         if (navigator.serviceWorker.controller) {
-            navigator.serviceWorker.controller.postMessage({
-                type: 'CANCEL_ALARM',
-                id: index
-            });
+            sendCancel(navigator.serviceWorker.controller);
+        } else if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.ready.then(reg => sendCancel(reg.active));
         }
+    }
+
+    function syncAllAlarmsWithSW() {
+        if (!('serviceWorker' in navigator) || Notification.permission !== 'granted') return;
+
+        medications.forEach((m, idx) => {
+            if (!m.taken && m.time) {
+                scheduleSWAlarm(m, idx);
+            }
+        });
     }
 
     function calculateAllSchedules(startTime, freq) {
@@ -568,7 +583,8 @@
         if (!name || !time) return notify("Informe o nome e o horário do remédio.", "warning");
 
         if (index === '') {
-            medications.push({ name, time, freq, initialTime: time, photo: currentPhotoBase64 || '', taken: false, nextDoseTimestamp: null, lastNotified: null });
+            const newMed = { name, time, freq, initialTime: time, photo: currentPhotoBase64 || '', taken: false, nextDoseTimestamp: null, lastNotified: null };
+            medications.push(newMed);
             notify("Remédio cadastrado com sucesso!", "success");
         } else { 
             medications[index].name = name; 
