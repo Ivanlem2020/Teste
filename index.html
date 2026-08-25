@@ -272,7 +272,7 @@
 
 <div class="container">
     <div id="notifyBanner" class="notify-banner" style="display: none;">
-        <span>Ative os lembretes para ser notificado no horário correto.</span>
+        <span>Ative os lembretes para ouvir o alarme no horário correto.</span>
         <button class="btn-notify-active" id="btnReqNotify">Ativar</button>
     </div>
     <div id="mainList"></div>
@@ -363,6 +363,8 @@
     </div>
 </div>
 
+<audio id="alarmAudio" src="alarme.mp3" preload="auto"></audio>
+
 <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
 
 <script>
@@ -395,6 +397,14 @@
             className: `toast-${type}`,
             stopOnFocus: true
         }).showToast();
+    }
+
+    function playAlarmAudio() {
+        const audio = document.getElementById('alarmAudio');
+        if (audio) {
+            audio.currentTime = 0;
+            audio.play().catch(e => console.log('Erro áudio:', e));
+        }
     }
 
     function formatFrequencyDisplay(freq) {
@@ -748,6 +758,7 @@
 
             if (!m.taken && m.time === currentHHMM && m.lastNotified !== todayKey + '_' + currentHHMM) {
                 notify(`HORA DO REMÉDIO: ${m.name}`, "alarm");
+                playAlarmAudio();
                 m.lastNotified = todayKey + '_' + currentHHMM;
                 localStorage.setItem('medications', JSON.stringify(medications));
             }
