@@ -2,14 +2,17 @@ const CACHE_NAME = 'remedios-pwa-v1';
 const ASSETS = [
     './',
     './index.html',
-    './manifest.json',
-    './alarme.mp3'
+    './manifest.json'
 ];
 
 self.addEventListener('install', (event) => {
     self.skipWaiting();
     event.waitUntil(
-        caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS))
+        caches.open(CACHE_NAME).then((cache) => {
+            // Tenta salvar o MP3 sem travar o instalador caso ele falhe
+            cache.add('./alarme.mp3').catch(err => console.log('Áudio opcional não encontrado no cache inicial:', err));
+            return cache.addAll(ASSETS);
+        })
     );
 });
 
@@ -26,6 +29,11 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
+    // Ignora requisições para a API do Cloudinary ou JSONBin do cache local
+    if (event.request.url.includes('cloudinary.com') || event.request.url.includes('jsonbin.io')) {
+        return;
+    }
+
     event.respondWith(
         caches.match(event.request).then((cachedResponse) => {
             return cachedResponse || fetch(event.request);
@@ -48,8 +56,8 @@ self.addEventListener('message', (event) => {
         const timerId = setTimeout(() => {
             self.registration.showNotification(title, {
                 body: body,
-                icon: photo || 'https://via.placeholder.com/192/4a90e2/ffffff?text=💊',
-                badge: 'https://via.placeholder.com/96/4a90e2/ffffff?text=💊',
+                icon: photo || 'https://raw.githubusercontent.com/google/material-design-icons/master/png/health/medication/materialicons/192pt/2x/baseline_medication_black_192pt_2x.png',
+                badge: 'https://raw.githubusercontent.com/google/material-design-icons/master/png/health/medication/materialicons/192pt/2x/baseline_medication_black_192pt_2x.png',
                 vibrate: [1000, 500, 1000, 500, 1000],
                 sound: './alarme.mp3',
                 tag: 'med-alarm-' + id,
