@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -140,7 +141,7 @@
 
         .form-group { margin-bottom: 18px; }
         label { display: block; margin-bottom: 6px; font-size: 13px; font-weight: 600; color: #444; }
-        input[type="text"], input[type="time"], select { 
+        input[type="text"], input[type="time"], input[type="number"], select { 
             width: 100%; 
             padding: 12px; 
             border: 1px solid var(--border); 
@@ -156,6 +157,7 @@
         .btn { width: 100%; color: white; border: none; padding: 14px; border-radius: 10px; font-weight: 700; cursor: pointer; font-size: 15px; transition: 0.2s; }
         .btn-add { background-color: var(--primary); box-shadow: 0 4px 12px rgba(74, 144, 226, 0.3); }
         .btn-add:hover { background-color: var(--primary-hover); }
+        .btn-add:disabled { background-color: #a0c4ff; cursor: not-allowed; }
         .btn-sync { background-color: #27ae60; box-shadow: 0 4px 12px rgba(39, 174, 96, 0.3); margin-top: 10px; }
 
         .photo-options { display: flex; gap: 8px; margin-bottom: 8px; }
@@ -196,8 +198,21 @@
             transition: 0.2s ease;
         }
         .med-item.taken { opacity: 0.6; background: #fdfdfd; }
+        .med-item.expired { 
+            background: #fdf2f2; 
+            border: 1px solid #f8b4b4; 
+        }
+        .med-item.expired .med-info b { color: #c0392b; }
+        .med-item.expired .status-expired {
+            color: #d32f2f;
+            font-weight: 700;
+            font-size: 12px;
+            display: block;
+            margin-top: 4px;
+        }
+
         .med-img { width: 52px; height: 52px; border-radius: 10px; object-fit: cover; margin-right: 14px; cursor: pointer; background: #eef2f5; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-        .taken .med-img { cursor: default; }
+        .taken .med-img, .expired .med-img { cursor: default; }
         .med-info { flex-grow: 1; }
         .med-info b { font-size: 15px; color: var(--text); display: block; margin-bottom: 4px; }
         .med-info span { font-size: 12px; color: var(--subtext); font-weight: 500; }
@@ -222,6 +237,7 @@
         .btn-mini { padding: 9px 14px; font-size: 13px; border-radius: 8px; border: none; cursor: pointer; font-weight: 700; background: #e8ecf1; color: var(--text); margin-left: 6px; transition: 0.2s; flex-shrink: 0; }
         .btn-mini:hover { filter: brightness(0.95); }
         .taken .btn-mini { background: #e8f8f0; color: var(--success); }
+        .expired .btn-mini.btn-take { background: #fbeaeb; color: #c0392b; }
 
         .image-modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.85); backdrop-filter: blur(5px); display: flex; justify-content: center; align-items: center; opacity: 0; pointer-events: none; z-index: 300; transition: 0.3s; }
         .image-modal.active { opacity: 1; pointer-events: auto; }
@@ -302,9 +318,15 @@
                     <option value="1x">1x ao dia</option>
                     <option value="8h">8 em 8 horas</option>
                     <option value="12h">12 em 12 horas</option>
+                    <option value="days">Por Dias (Tratamento Temporário)</option>
                 </select>
             </div>
             
+            <div class="form-group" id="groupDays" style="display: none;">
+                <label>Duração do Tratamento (Dias)</label>
+                <input type="number" id="medDays" placeholder="Ex: 5" min="1">
+            </div>
+
             <div class="form-group">
                 <label>Foto da Caixa</label>
                 <div class="photo-options">
@@ -381,11 +403,14 @@
     const JSONBIN_API_KEY = "$2a$10$7BBk9AA/0h3zZxTwYz9TluPmvrsT3avKvxNoJNPKX3MJfq0oflohy"; 
     const API_URL = `https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}`;
 
+    const CLOUDINARY_CLOUD_NAME = "jiio9hbs";
+    const CLOUDINARY_UPLOAD_PRESET = "oyz8neet";
+
     let medications = JSON.parse(localStorage.getItem('medications')) || [];
     let userCode = localStorage.getItem('userCode') || 'mae';
     let selectedIndex = null;
     let deleteIndex = null;
-    let currentPhotoBase64 = '';
+    let currentPhotoUrl = '';
 
     function notify(text, type = 'info') {
         const icons = { success: '✅', error: '🚨', warning: '⚠️', info: 'ℹ️', alarm: '⏰' };
@@ -407,10 +432,25 @@
         }
     }
 
-    function formatFrequencyDisplay(freq) {
-        if (freq === '8h') return '8/8h';
-        if (freq === '12h') return '12/12h';
-        return freq;
+    function formatFrequencyDisplay(m) {
+        if (m.freq === '8h') return '8/8h';
+        if (m.freq === '12h') return '12/12h';
+        if (m.freq === 'days') return `Por ${m.days || 1} dia(s)`;
+        return m.freq || '1x';
+    }
+
+    function isTreatmentExpired(m) {
+        if (m.freq === 'days' && m.startDate && m.days) {
+            const start = new Date(m.startDate);
+            start.setHours(0, 0, 0, 0);
+            const now = new Date();
+            now.setHours(0, 0, 0, 0);
+            
+            const diffTime = now.getTime() - start.getTime();
+            const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+            return diffDays >= parseInt(m.days);
+        }
+        return false;
     }
 
     function toggleDrawer(open) { document.getElementById('drawerOverlay').classList.toggle('active', open); }
@@ -446,9 +486,13 @@
 
     function scheduleSWAlarm(medication, index) {
         if (!('serviceWorker' in navigator) || Notification.permission !== 'granted') return;
+        if (isTreatmentExpired(medication)) return;
 
         const now = new Date();
-        const [h, min] = medication.time.split(':').map(Number);
+        const timeToUse = medication.time || medication.initialTime;
+        if (!timeToUse) return;
+
+        const [h, min] = timeToUse.split(':').map(Number);
         let target = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, min, 0, 0);
 
         if (target.getTime() <= now.getTime()) {
@@ -498,7 +542,7 @@
         if (!('serviceWorker' in navigator) || Notification.permission !== 'granted') return;
 
         medications.forEach((m, idx) => {
-            if (!m.taken && m.time) {
+            if (!m.taken && (m.time || m.initialTime) && !isTreatmentExpired(m)) {
                 scheduleSWAlarm(m, idx);
             }
         });
@@ -528,41 +572,80 @@
 
     function handlePhotoSelect(input) {
         const file = input.files[0];
-        if (file) {
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                compressImage(e.target.result, 120, 120, 0.2, (compressedBase64) => {
-                    currentPhotoBase64 = compressedBase64;
-                    document.getElementById('previewImg').src = currentPhotoBase64;
-                    document.getElementById('photoPreview').style.display = 'block';
-                });
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const img = new Image();
+            img.onload = function() {
+                const canvas = document.createElement('canvas');
+                let width = img.width;
+                let height = img.height;
+                const maxDim = 1024;
+
+                if (width > height) {
+                    if (width > maxDim) {
+                        height *= maxDim / width;
+                        width = maxDim;
+                    }
+                } else {
+                    if (height > maxDim) {
+                        width *= maxDim / height;
+                        height = maxDim;
+                    }
+                }
+
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, width, height);
+
+                canvas.toBlob(function(blob) {
+                    if (blob) {
+                        uploadBlobToCloudinary(blob);
+                    }
+                }, 'image/jpeg', 0.75);
             };
-            reader.readAsDataURL(file);
+            img.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+    }
+
+    async function uploadBlobToCloudinary(blob) {
+        const formData = new FormData();
+        formData.append('file', blob, 'photo.jpg');
+        formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+
+        const saveBtn = document.getElementById('btnSave');
+        saveBtn.disabled = true;
+        saveBtn.innerText = "Carregando foto...";
+
+        try {
+            const response = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, {
+                method: 'POST',
+                body: formData
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                currentPhotoUrl = data.secure_url;
+                document.getElementById('previewImg').src = currentPhotoUrl;
+                document.getElementById('photoPreview').style.display = 'block';
+                notify("Foto enviada com sucesso!", "success");
+            } else {
+                notify("Erro ao enviar imagem para o servidor.", "error");
+            }
+        } catch (error) {
+            console.error('Erro Cloudinary:', error);
+            notify("Erro de conexão ao enviar imagem.", "error");
+        } finally {
+            saveBtn.disabled = false;
+            saveBtn.innerText = "Salvar Remédio";
         }
     }
 
-    function compressImage(base64, maxWidth, maxHeight, quality, callback) {
-        const img = new Image();
-        img.src = base64;
-        img.onload = () => {
-            let width = img.width;
-            let height = img.height;
-            if (width > height) {
-                if (width > maxWidth) { height *= maxWidth / width; width = maxWidth; }
-            } else {
-                if (height > maxHeight) { width *= maxHeight / height; height = maxHeight; }
-            }
-            const canvas = document.createElement('canvas');
-            canvas.width = width;
-            canvas.height = height;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(img, 0, 0, width, height);
-            callback(canvas.toDataURL('image/jpeg', quality));
-        };
-    }
-
     function removePhoto() {
-        currentPhotoBase64 = '';
+        currentPhotoUrl = '';
         document.getElementById('previewImg').src = '';
         document.getElementById('photoPreview').style.display = 'none';
         document.getElementById('cameraInput').value = '';
@@ -574,6 +657,8 @@
         document.getElementById('medName').value = '';
         document.getElementById('medTime').value = '';
         document.getElementById('medFreq').value = '1x';
+        document.getElementById('medDays').value = '';
+        document.getElementById('groupDays').style.display = 'none';
         removePhoto();
     }
 
@@ -589,11 +674,29 @@
         const name = document.getElementById('medName').value.trim();
         const time = document.getElementById('medTime').value;
         const freq = document.getElementById('medFreq').value;
+        const days = document.getElementById('medDays').value;
 
         if (!name || !time) return notify("Informe o nome e o horário do remédio.", "warning");
+        if (freq === 'days' && (!days || parseInt(days) <= 0)) {
+            return notify("Informe a quantidade de dias do tratamento.", "warning");
+        }
+
+        const todayStr = new Date().toDateString();
 
         if (index === '') {
-            const newMed = { name, time, freq, initialTime: time, photo: currentPhotoBase64 || '', taken: false, nextDoseTimestamp: null, lastNotified: null };
+            const newMed = { 
+                name, 
+                time, 
+                freq, 
+                days: freq === 'days' ? parseInt(days) : null,
+                startDate: freq === 'days' ? todayStr : null,
+                initialTime: time, 
+                photo: currentPhotoUrl || '', 
+                taken: false, 
+                nextDoseTimestamp: null, 
+                lastNotified: null, 
+                lastTakenDate: null 
+            };
             medications.push(newMed);
             notify("Remédio cadastrado com sucesso!", "success");
         } else { 
@@ -601,7 +704,11 @@
             medications[index].time = time; 
             medications[index].initialTime = time;
             medications[index].freq = freq; 
-            if (currentPhotoBase64) medications[index].photo = currentPhotoBase64; 
+            medications[index].days = freq === 'days' ? parseInt(days) : null;
+            if (freq === 'days' && !medications[index].startDate) {
+                medications[index].startDate = todayStr;
+            }
+            if (currentPhotoUrl) medications[index].photo = currentPhotoUrl; 
             notify("Remédio atualizado!", "success");
         }
 
@@ -613,17 +720,21 @@
     function editMed(index) {
         const m = medications[index];
         document.getElementById('editIndex').value = index;
-        document.getElementById('medName').value = m.name;
-        document.getElementById('medTime').value = m.initialTime || m.time;
-        document.getElementById('medFreq').value = m.freq;
+        document.getElementById('medName').value = m.name || '';
+        document.getElementById('medTime').value = m.initialTime || m.time || '';
+        document.getElementById('medFreq').value = m.freq || '1x';
+        document.getElementById('medDays').value = m.days || '';
+        
+        if (m.freq === 'days') {
+            document.getElementById('groupDays').style.display = 'block';
+        } else {
+            document.getElementById('groupDays').style.display = 'none';
+        }
         
         if (m.photo) {
-            compressImage(m.photo, 120, 120, 0.2, (compressed) => {
-                currentPhotoBase64 = compressed;
-                m.photo = compressed;
-                document.getElementById('previewImg').src = currentPhotoBase64;
-                document.getElementById('photoPreview').style.display = 'block';
-            });
+            currentPhotoUrl = m.photo;
+            document.getElementById('previewImg').src = currentPhotoUrl;
+            document.getElementById('photoPreview').style.display = 'block';
         } else {
             removePhoto();
         }
@@ -650,8 +761,8 @@
         }
     }
 
-    function openImageModal(photoUrl, isTaken) {
-        if (isTaken || !photoUrl) return;
+    function openImageModal(photoUrl, isTaken, expired) {
+        if (isTaken || expired || !photoUrl) return;
         document.getElementById('fullImage').src = photoUrl;
         document.getElementById('imageModal').classList.add('active');
     }
@@ -663,10 +774,12 @@
         if (selectedIndex !== null) {
             const m = medications[selectedIndex];
             m.taken = true;
+            m.lastTakenDate = new Date().toDateString();
             cancelSWAlarm(selectedIndex);
 
             let nextDate = new Date();
-            const [h, min] = m.time.split(':').map(Number);
+            const timeToUse = m.time || m.initialTime || "00:00";
+            const [h, min] = timeToUse.split(':').map(Number);
             nextDate.setHours(h, min, 0, 0);
 
             if (m.freq === '8h') nextDate.setHours(nextDate.getHours() + 8);
@@ -750,13 +863,23 @@
         let stateChanged = false;
 
         medications.forEach(m => {
+            if (isTreatmentExpired(m)) return;
+
             if (m.taken && m.nextDoseTimestamp && now.getTime() >= m.nextDoseTimestamp) { 
                 m.taken = false; 
                 m.nextDoseTimestamp = null; 
                 stateChanged = true;
             }
 
-            if (!m.taken && m.time === currentHHMM && m.lastNotified !== todayKey + '_' + currentHHMM) {
+            if (m.taken && m.lastTakenDate && m.lastTakenDate !== todayKey && (!m.nextDoseTimestamp || m.freq === '1x' || m.freq === 'days')) {
+                m.taken = false;
+                m.nextDoseTimestamp = null;
+                m.time = m.initialTime || m.time;
+                stateChanged = true;
+            }
+
+            const checkTime = m.time || m.initialTime;
+            if (!m.taken && checkTime === currentHHMM && m.lastNotified !== todayKey + '_' + currentHHMM) {
                 notify(`HORA DO REMÉDIO: ${m.name}`, "alarm");
                 playAlarmAudio();
                 m.lastNotified = todayKey + '_' + currentHHMM;
@@ -765,8 +888,7 @@
         });
 
         if (stateChanged) {
-            render();
-            syncAllAlarmsWithSW();
+            saveToStorage();
         }
     }
 
@@ -776,12 +898,15 @@
             mainContainer.innerHTML = `<div class="empty-state"><span class="empty-state-icon">📋</span>Nenhum remédio cadastrado.<br>Clique no menu para adicionar.</div>`;
         } else {
             mainContainer.innerHTML = medications.map((m, i) => {
-                const baseTime = m.initialTime || m.time;
-                const allSchedules = calculateAllSchedules(baseTime, m.freq);
-                const freqText = formatFrequencyDisplay(m.freq);
+                const expired = isTreatmentExpired(m);
+                const baseTime = m.initialTime || m.time || '00:00';
+                const allSchedules = calculateAllSchedules(baseTime, m.freq || '1x');
+                const freqText = formatFrequencyDisplay(m);
                 
                 let scheduleHTML = '';
-                if (allSchedules.length > 1) {
+                if (expired) {
+                    scheduleHTML = `<span class="status-expired">⚠️ Terminando o tratamento</span>`;
+                } else if (allSchedules.length > 1) {
                     const badges = allSchedules.map(timeStr => {
                         const isNext = (timeStr === m.time && !m.taken);
                         return `<span class="schedule-badge ${isNext ? 'next-dose' : ''}">${timeStr}</span>`;
@@ -792,17 +917,21 @@
                         <div class="schedule-badges">${badges}</div>
                     `;
                 } else {
-                    scheduleHTML = `<span>Horário: ${m.time} (${freqText})</span>`;
+                    scheduleHTML = `<span>Horário: ${m.time || baseTime} (${freqText})</span>`;
                 }
 
+                let btnLabel = 'Tomar';
+                if (expired) btnLabel = 'Terminou o tratamento';
+                else if (m.taken) btnLabel = '✅ Tomado';
+
                 return `
-                    <div class="med-item ${m.taken ? 'taken' : ''}">
-                        <img src="${m.photo || 'https://via.placeholder.com/52?text=💊'}" class="med-img" data-index="${i}" alt="${m.name}">
+                    <div class="med-item ${expired ? 'expired' : (m.taken ? 'taken' : '')}">
+                        <img src="${m.photo || 'https://via.placeholder.com/52?text=💊'}" class="med-img" data-index="${i}" alt="${m.name || 'Remédio'}">
                         <div class="med-info">
-                            <b>${m.name}</b>
+                            <b>${m.name || 'Sem nome'}</b>
                             ${scheduleHTML}
                         </div>
-                        <button class="btn-mini btn-take" data-index="${i}" ${m.taken ? 'disabled' : ''}>${m.taken ? '✅ Tomado' : 'Tomar'}</button>
+                        <button class="btn-mini btn-take" data-index="${i}" ${m.taken || expired ? 'disabled' : ''}>${btnLabel}</button>
                     </div>
                 `;
             }).join('');
@@ -813,15 +942,15 @@
             manageContainer.innerHTML = `<div class="empty-state">Sem itens para gerenciar.</div>`;
         } else {
             manageContainer.innerHTML = medications.map((m, i) => {
-                const baseTime = m.initialTime || m.time;
-                const allSchedules = calculateAllSchedules(baseTime, m.freq);
+                const baseTime = m.initialTime || m.time || '00:00';
+                const allSchedules = calculateAllSchedules(baseTime, m.freq || '1x');
                 const schedulesStr = allSchedules.join(' - ');
-                const freqText = formatFrequencyDisplay(m.freq);
+                const freqText = formatFrequencyDisplay(m);
 
                 return `
                     <div class="med-item">
                         <div class="med-info">
-                            <b>${m.name}</b>
+                            <b>${m.name || 'Sem nome'}</b>
                             <span>${schedulesStr} (${freqText})</span>
                         </div>
                         <button class="btn-mini btn-edit" data-index="${i}" style="background:#fff3cd; color:#856404;">Editar</button>
@@ -834,14 +963,17 @@
         document.querySelectorAll('.med-img').forEach(img => {
             img.addEventListener('click', (e) => {
                 const idx = e.target.getAttribute('data-index');
-                openImageModal(medications[idx].photo, medications[idx].taken);
+                const item = medications[idx];
+                openImageModal(item.photo, item.taken, isTreatmentExpired(item));
             });
         });
 
         document.querySelectorAll('.btn-take').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 const idx = e.target.getAttribute('data-index');
-                openConfirmModal(idx);
+                if (!isTreatmentExpired(medications[idx])) {
+                    openConfirmModal(idx);
+                }
             });
         });
 
@@ -880,6 +1012,10 @@
     document.getElementById('tabAdd').addEventListener('click', () => switchTab('add', true));
     document.getElementById('tabManage').addEventListener('click', () => switchTab('manage'));
     document.getElementById('tabSync').addEventListener('click', () => switchTab('sync'));
+
+    document.getElementById('medFreq').addEventListener('change', function() {
+        document.getElementById('groupDays').style.display = this.value === 'days' ? 'block' : 'none';
+    });
 
     document.getElementById('btnCamera').addEventListener('click', () => document.getElementById('cameraInput').click());
     document.getElementById('btnGallery').addEventListener('click', () => document.getElementById('galleryInput').click());
